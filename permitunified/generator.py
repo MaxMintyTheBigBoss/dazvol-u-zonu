@@ -171,6 +171,32 @@ def join_objects(objects: List[Dict[str, str]], custom: str = "") -> str:
     return "; ".join(lst)
 
 
+def load_reference() -> List[Dict[str, str]]:
+    """Справочник кладбищ: список {district, object}."""
+    path = os.path.join(template_dir(), "справочник.docx")
+    entries: List[Dict[str, str]] = []
+    if not os.path.exists(path):
+        return entries
+    try:
+        doc = Document(path)
+        for p in doc.paragraphs:
+            parts = [t for t in p.text.split("\t") if t.strip()]
+            if len(parts) >= 3:
+                district = parts[0].strip()
+                obj = "кладбище о.н.п. " + parts[2].strip()
+                if district and obj:
+                    entries.append({"district": district, "object": obj})
+    except Exception:
+        pass
+    return entries
+
+
+def filter_objects_by_districts(reference: List[Dict[str, str]], districts: List[str]) -> List[Dict[str, str]]:
+    """Только кладбища, относящиеся к выбранным районам."""
+    allowed = set(districts)
+    return [r for r in reference if r["district"] in allowed]
+
+
 def build_mapping_143(data: Dict) -> Dict:
     """Собирает mapping для процедуры 14.3"""
     districts = data.get("districts", [])

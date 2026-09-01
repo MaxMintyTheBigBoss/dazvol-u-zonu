@@ -4,15 +4,17 @@ block_cipher = None
 
 a = Analysis(
     ['app.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
     datas=[
         ('templates', 'templates'),
         ('permit_update_gui.py', '.'),
+        ('permitunified', 'permitunified'),
     ],
     hiddenimports=[
         'tkcalendar',
         'babel',
+        'babel.numbers',
         'openpyxl',
         'permit_update',
         'permit_update_gui',
@@ -42,9 +44,8 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=False,  # без UPX
+    runtime_tmpdir=None,  # распаковка в каталог .exe, а не в Temp
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,

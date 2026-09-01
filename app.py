@@ -5,6 +5,15 @@
 """
 import os
 import sys
+
+# В frozen-режиме (PyInstaller) задаём пути к Tcl/Tk, иначе "Failed to start embedded python interpreter"
+if getattr(sys, 'frozen', False):
+    bundle_dir = sys._MEIPASS
+    os.environ['TCL_LIBRARY'] = os.path.join(bundle_dir, 'tcl', 'tcl8.6')
+    os.environ['TK_LIBRARY'] = os.path.join(bundle_dir, 'tcl', 'tk8.6')
+    # Принудительно используем bundle_dir для поиска модулей
+    sys.path.insert(0, bundle_dir)
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
@@ -12,17 +21,45 @@ from pathlib import Path
 # Добавляем путь к модулям
 sys.path.insert(0, str(Path(__file__).parent))
 
-from permitunified.generator import (
-    generate_all, db_find, db_find_org, db_list_fio, db_list_org,
-    UnifiedPermitDB, get_db_path
-)
-from permitunified.procedures import ProcedureConfig, list_procedures
-from permitunified.db import export_db_dialog
+try:
+    from permitunified.generator import (
+        generate_all, db_find, db_find_org, db_list_fio, db_list_org,
+        UnifiedPermitDB, get_db_path,
+        load_reference, filter_objects_by_districts
+    )
+    from permitunified.procedures import ProcedureConfig, list_procedures, get_procedure
+    from permitunified.db import export_db_dialog
+except ImportError:
+    # Fallback для PyInstaller — загружаем напрямую
+    import importlib.util
+    def _load(name, path):
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+        return mod
+    _gen = _load("permitunified.generator", str(Path(__file__).parent / "permitunified" / "generator.py"))
+    _proc = _load("permitunified.procedures", str(Path(__file__).parent / "permitunified" / "procedures.py"))
+    _db = _load("permitunified.db", str(Path(__file__).parent / "permitunified" / "db.py"))
+    generate_all = _gen.generate_all
+    db_find = _gen.db_find
+    db_find_org = _gen.db_find_org
+    db_list_fio = _gen.db_list_fio
+    db_list_org = _gen.db_list_org
+    UnifiedPermitDB = _gen.UnifiedPermitDB
+    get_db_path = _gen.get_db_path
+    load_reference = _gen.load_reference
+    filter_objects_by_districts = _gen.filter_objects_by_districts
+    ProcedureConfig = _proc.ProcedureConfig
+    list_procedures = _proc.list_procedures
+    get_procedure = _proc.get_procedure
+    export_db_dialog = _db.export_db_dialog
+
 from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.2"
+APP_VERSION = "0.0.5"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
 BTN_ACTIVE = "#B3C3B8"
@@ -135,7 +172,6 @@ class ProcedureSelectDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Выбор")
-        self.geometry("320x300")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -152,17 +188,27 @@ class ProcedureSelectDialog(tk.Toplevel):
             btn = tk.Button(
                 self,
                 text=proc.code,
-                font=("", 16, "bold"),
+                font=("", 20, "bold"),
                 bg=color,
                 fg=fg,
                 activebackground=color,
                 activeforeground=fg,
                 relief="flat",
                 cursor="hand2",
-                height=2,
+                height=3,
                 command=lambda p=proc.code: self._select(p),
             )
-            btn.pack(fill="both", expand=True, padx=10, pady=6)
+            btn.pack(fill="both", expand=True, padx=12, pady=8)
+
+        # Центрируем окно на экране после отрисовки виджетов
+        self.update_idletasks()
+        w = self.winfo_reqwidth()
+        h = self.winfo_reqheight()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _select(self, proc_code: str):
         self.selected_proc = proc_code
@@ -247,9 +293,14 @@ class PermitApp(tk.Tk):
         style.configure("TLabel", background=PROC_COLORS.get(self.procedure_code, BG_COLOR))
         style.configure("TCheckbutton", background=PROC_COLORS.get(self.procedure_code, BG_COLOR))
         style.configure("TNotebook", background=PROC_COLORS.get(self.procedure_code, BG_COLOR))
-        style.configure("TNotebook.Tab", padding=(12, 6), font=("", 9, "bold"))
+        style.configure("TNotebook.Tab", padding=(12, 6), font=("", 11, "bold"))
         style.map("TNotebook.Tab", background=[("selected", BTN_ACTIVE)], foreground=[("selected", "black")])
-        style.configure("TButton", font=("", 9, "bold"))
+        style.configure(".", font=("", 11))
+        style.configure("TButton", font=("", 11, "bold"))
+        style.configure("TLabel", font=("", 11))
+        style.configure("TEntry", font=("", 11))
+        style.configure("TCombobox", font=("", 11))
+        style.configure("TCheckbutton", font=("", 11))
         style.map("TButton", background=[("active", BTN_ACTIVE), ("!active", BTN_BG)])
 
         # Заголовок с названием процедуры
@@ -327,7 +378,7 @@ class PermitApp(tk.Tk):
             r += 1
             # Представитель организации
             ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Представитель организации:", font=("", 9, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
+            ttk.Label(parent, text="Представитель организации:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
             ttk.Label(parent, text="Фамилия:").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_org_rep_last, width=30).grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
@@ -336,7 +387,7 @@ class PermitApp(tk.Tk):
             ttk.Entry(parent, textvariable=self.var_org_rep_middle, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
         else:
             # ФИО заявителя
-            ttk.Label(parent, text="Фамилия:", font=("", 9, "bold")).grid(row=r, column=0, sticky="w", **pad)
+            ttk.Label(parent, text="Фамилия:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_last_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_first_name, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
@@ -349,7 +400,7 @@ class PermitApp(tk.Tk):
 
         # Цель въезда
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-        ttk.Label(parent, text="Цель въезда:", font=("", 9, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
+        ttk.Label(parent, text="Цель въезда:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
         if self.procedure.goal_fixed:
             self.var_goal.set(self.procedure.goal_fixed)
             ttk.Label(parent, text=self.procedure.goal_fixed, foreground="gray").grid(row=r, column=0, columnspan=4, sticky="w", **pad)
@@ -363,7 +414,7 @@ class PermitApp(tk.Tk):
 
         # Срок действия
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-        ttk.Label(parent, text="Срок действия:", font=("", 9, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
+        ttk.Label(parent, text="Срок действия:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
         ttk.Label(parent, text="С:").grid(row=r, column=0, sticky="w", **pad)
         DateEntryWithCalendar(parent, "", self.var_date_from).grid(row=r, column=1, sticky="ew", **pad)
         ttk.Label(parent, text="По:").grid(row=r, column=2, sticky="w", **pad)
@@ -371,7 +422,7 @@ class PermitApp(tk.Tk):
 
         # Кому на подписание
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-        ttk.Label(parent, text="Кому на подписание:", font=("", 9, "bold")).grid(row=r, column=0, sticky="w", **pad)
+        ttk.Label(parent, text="Кому на подписание:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
         self.var_issued_by = tk.StringVar(value=self.procedure.signers[0] if self.procedure.signers else "")
         self.db_combo = ttk.Combobox(parent, textvariable=self.var_issued_by, values=self.procedure.signers, width=55, state="readonly")
         self.db_combo.grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
@@ -429,7 +480,7 @@ class PermitApp(tk.Tk):
         # Список
         list_frame = ttk.Frame(parent)
         list_frame.pack(fill="both", expand=True, padx=8, pady=4)
-        self.persons_listbox = tk.Listbox(list_frame, height=10, font=("", 10))
+        self.persons_listbox = tk.Listbox(list_frame, height=10, font=("", 12))
         self.persons_listbox.pack(side="left", fill="both", expand=True)
         scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.persons_listbox.yview)
         scroll.pack(side="right", fill="y")
@@ -485,7 +536,7 @@ class PermitApp(tk.Tk):
 
         list_frame = ttk.Frame(parent)
         list_frame.pack(fill="both", expand=True, padx=8, pady=4)
-        self.vehicles_listbox = tk.Listbox(list_frame, height=10, font=("", 10))
+        self.vehicles_listbox = tk.Listbox(list_frame, height=10, font=("", 12))
         self.vehicles_listbox.pack(side="left", fill="both", expand=True)
         scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.vehicles_listbox.yview)
         scroll.pack(side="right", fill="y")
@@ -502,7 +553,7 @@ class PermitApp(tk.Tk):
         r = 0
 
         # Районы
-        ttk.Label(parent, text="Районы (отметьте нужные):", font=("", 9, "bold")).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
+        ttk.Label(parent, text="Районы (отметьте нужные):", font=("", 11, "bold")).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
         self.district_vars = {}
         districts_frame = ttk.Frame(parent)
         districts_frame.grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
@@ -515,7 +566,7 @@ class PermitApp(tk.Tk):
 
         # Объекты / PGREZ / Произвольный объект
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-        ttk.Label(parent, text="Объекты (кладбища):", font=("", 9, "bold")).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
+        ttk.Label(parent, text="Объекты (кладбища):", font=("", 11, "bold")).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
 
         # Чекбокс PGREZ для 19.17.1
         if self.procedure_code == "19.17.1":
@@ -537,7 +588,6 @@ class PermitApp(tk.Tk):
         if self.procedure_code == "19.17.1":
             return
         selected = self._selected_districts()
-        from generator import load_reference, filter_objects_by_districts
         ref = load_reference()
         filtered = filter_objects_by_districts(ref, selected)
         self.objects_clb.set_items([o["object"] for o in filtered])
@@ -548,7 +598,7 @@ class PermitApp(tk.Tk):
     def _build_tab_cargo(self, parent):
         """Вкладка груз (только 14.5)."""
         pad = {"padx": 6, "pady": 4}
-        ttk.Label(parent, text="Вид и количество имущества:", font=("", 9, "bold")).grid(row=0, column=0, sticky="w", **pad)
+        ttk.Label(parent, text="Вид и количество имущества:", font=("", 11, "bold")).grid(row=0, column=0, sticky="w", **pad)
         ttk.Entry(parent, textvariable=self.var_cargo, width=80).grid(row=0, column=1, columnspan=3, sticky="ew", padx=8, pady=4)
 
     def _build_buttons(self):
