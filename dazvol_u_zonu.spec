@@ -10,23 +10,12 @@ a = Analysis(
         ('templates', 'templates'),
         ('permit_update_gui.py', '.'),
         ('permitunified', 'permitunified'),
-        # Данные babel — без них tkcalendar ломает Tcl при locale="ru_RU"
-        # Сейчас locale убран, но оставим на всякий случай
     ],
     hiddenimports=[
         'tkcalendar',
         'babel',
         'babel.numbers',
         'babel.dates',
-        'babel.messages',
-        'babel.core',
-        'babel.localedata',
-        'babel.localtime',
-        'babel.support',
-        'babel.plural',
-        'babel.unknown',
-        'babel._compat',
-        'babel._numbers',
         'openpyxl',
         'permit_update',
         'permit_update_gui',
@@ -38,7 +27,19 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['rthook_tcl.py'],
-    excludes=[],
+    # КРИТИЧНО: исключаем pkg_resources и setuptools
+    # Из-за них tkinter / tkcalendar тянет jaraco.text, который
+    # пытается прочитать Lorem ipsum.txt и падает.
+    excludes=[
+        'pkg_resources',
+        'pkg_resources.py2_warn',
+        'setuptools',
+        'setuptools._vendor',
+        'setuptools._vendor.jaraco',
+        'setuptools._vendor.jaraco.text',
+        'jaraco.text',
+        'pyi_rth_pkgres',
+    ],
     noarchive=False,
     optimize=0,
 )
@@ -52,7 +53,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='dazvol_u_zonu',
+    name='dazvol_u_zony0.0.7',  # имя с версией
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

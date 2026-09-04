@@ -59,7 +59,8 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.6"
+APP_VERSION = "0.0.7"
+APP_EXE_NAME = f"dazvol_u_zony{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
 BTN_ACTIVE = "#B3C3B8"
@@ -232,6 +233,11 @@ class ProcedureSelectDialog(tk.Toplevel):
             command=self._action_update
         ).pack(side="left", fill="x", expand=True, padx=2)
 
+        ttk.Button(
+            actions_frame, text="ℹ️ О программе",
+            command=self._action_about
+        ).pack(side="left", fill="x", expand=True, padx=2)
+
         # === Выход ===
         ttk.Button(
             main, text="Выход", command=self._cancel
@@ -278,6 +284,10 @@ class ProcedureSelectDialog(tk.Toplevel):
         self.selected_action = "check_updates"
         self.destroy()
 
+    def _action_about(self):
+        self.selected_action = "about"
+        self.destroy()
+
     def _cancel(self):
         self.selected_proc = None
         self.selected_action = "cancel"
@@ -309,7 +319,11 @@ class PermitApp(tk.Tk):
         self._refresh_db_lists()
 
     def _choose_procedure(self):
-        """Модальный диалог: выбор процедуры / действие / выход."""
+        """Модальный диалог: выбор процедуры / действие / выход.
+
+        Окно открывается заново после каждого действия (БД, обновления, О программе),
+        пока пользователь не выберет процедуру или не нажмёт Выход.
+        """
         while True:
             dlg = ProcedureSelectDialog(self)
             self.wait_window(dlg)
@@ -318,30 +332,33 @@ class PermitApp(tk.Tk):
             code = dlg.selected_proc
 
             if action == "cancel" or code is None:
-                # Выход
+                # Выход из программы
                 self.procedure_code = None
                 return
 
             if action == "export_db":
-                export_db_dialog(self, get_db_path(), "permits_export_XXXX.json")
-                continue  # Показываем диалог снова
+                try:
+                    export_db_dialog(self, get_db_path(), "permits_export_XXXX.json")
+                except Exception as e:
+                    messagebox.showerror("Выгрузка БД", f"Ошибка: {e}")
+                # Показываем меню снова
 
             if action == "import_db":
                 self._import_db()
-                continue
 
             if action == "check_updates":
-                dlg_upd = UpdateDialog(self, APP_VERSION, "dazvol_u_zonu.exe")
-                self.wait_window(dlg_upd)
-                continue
+                try:
+                    dlg_upd = UpdateDialog(self, APP_VERSION, APP_EXE_NAME)
+                    self.wait_window(dlg_upd)
+                except Exception as e:
+                    messagebox.showerror("Обновления", f"Ошибка: {e}")
+
+            if action == "about":
+                self._show_about()
 
             if action == "procedure" and code:
                 self.procedure_code = code
                 return
-
-            # На всякий случай
-            self.procedure_code = code
-            return
 
     def _import_db(self):
         """Импорт БД из JSON файла."""
@@ -374,6 +391,30 @@ class PermitApp(tk.Tk):
             )
         except Exception as e:
             messagebox.showerror("Ошибка импорта БД", f"Не удалось импортировать:\n{e}")
+
+    def _show_about(self):
+        """Окно с информацией о программе."""
+        about = (
+            f"{APP_NAME}\n"
+            f"Версия {APP_VERSION}\n"
+            f"Файл: {APP_EXE_NAME}\n\n"
+            f"Единый генератор пропусков по процедурам:\n"
+            f"  • 14.3 — Пребывание на территории зоны\n"
+            f"  • 14.5 — Вывоз имущества\n"
+            f"  • 19.17.1 — Въезд транспорта / Работы\n\n"
+            f"Возможности:\n"
+            f"  • Генерация заявлений и пропусков (.docx, А6)\n"
+            f"  • Единая SQLite база данных (все процедуры)\n"
+            f"  • Экспорт БД в JSON / CSV / Excel\n"
+            f"  • Импорт БД из JSON\n"
+            f"  • Обновление через GitHub или из локального .zip\n\n"
+            f"Создатель: Соломейчук Алексей\n"
+            f"Англ.: Salamiaichuk Aliaksei\n"
+            f"Email: al.vl.solo@yandex.by\n\n"
+            f"Репозиторий: github.com/MaxMintyTheBigBoss/dazvol-u-zonu\n"
+            f"© 2026"
+        )
+        messagebox.showinfo("О программе", about)
 
     def _init_variables(self):
         """Инициализация переменных формы в зависимости от процедуры."""
@@ -471,11 +512,6 @@ class PermitApp(tk.Tk):
             tab5 = ttk.Frame(self.nb)
             self.nb.add(tab5, text="5. Груз")
             self._build_tab_cargo(tab5)
-
-        # Вкладка О программе
-        tab_about = ttk.Frame(self.nb)
-        self.nb.add(tab_about, text="О программе")
-        self._build_about_tab(tab_about)
 
         # Кнопки внизу (всегда видны)
         self._build_buttons()
@@ -732,17 +768,15 @@ class PermitApp(tk.Tk):
         ttk.Entry(parent, textvariable=self.var_cargo, width=80).grid(row=0, column=1, columnspan=3, sticky="ew", padx=8, pady=4)
 
     def _build_buttons(self):
-        """Нижняя панель кнопок — всегда видна."""
+        """Нижняя панель кнопок — всегда видна. Только рабочие кнопки."""
         btns = ttk.Frame(self)
         btns.pack(fill="x", padx=8, pady=(0, 8))
-        for i in range(6):
+        for i in range(4):
             btns.columnconfigure(i, weight=1)
         ttk.Button(btns, text="Сгенерировать документы", command=self.generate).grid(row=0, column=0, sticky="ew", padx=2)
         ttk.Button(btns, text="Очистить форму", command=self.clear_form).grid(row=0, column=1, sticky="ew", padx=2)
         ttk.Button(btns, text="Куда сохранять…", command=self.choose_output).grid(row=0, column=2, sticky="ew", padx=2)
         ttk.Button(btns, text="Открыть папку", command=self.open_output).grid(row=0, column=3, sticky="ew", padx=2)
-        ttk.Button(btns, text="Выгрузить БД", command=self.export_db).grid(row=0, column=4, sticky="ew", padx=2)
-        ttk.Button(btns, text="Обновления…", command=self.check_updates).grid(row=0, column=5, sticky="ew", padx=2)
 
     def _build_about_tab(self, parent):
         txt = (
