@@ -5,18 +5,18 @@
 """
 import os
 import sys
-
-# В frozen-режиме (PyInstaller) задаём пути к Tcl/Tk, иначе "Failed to start embedded python interpreter"
-if getattr(sys, 'frozen', False):
-    bundle_dir = sys._MEIPASS
-    os.environ['TCL_LIBRARY'] = os.path.join(bundle_dir, 'tcl', 'tcl8.6')
-    os.environ['TK_LIBRARY'] = os.path.join(bundle_dir, 'tcl', 'tk8.6')
-    # Принудительно используем bundle_dir для поиска модулей
-    sys.path.insert(0, bundle_dir)
-
+# runtime_hook rthook_tcl.py настраивает TCL_LIBRARY/TK_LIBRARY ДО импорта tkinter
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
+
+# Импорт tkcalendar на уровне модуля — иначе падает при первом открытии календаря в скомпилированном exe
+try:
+    from tkcalendar import Calendar as _TkCalendar
+    _TKCALENDAR_OK = True
+except ImportError:
+    _TKCALENDAR_OK = False
+    _TkCalendar = None
 
 # Добавляем путь к модулям
 sys.path.insert(0, str(Path(__file__).parent))
@@ -59,7 +59,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.5"
+APP_VERSION = "0.0.6"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
 BTN_ACTIVE = "#B3C3B8"
@@ -149,16 +149,14 @@ class DateEntryWithCalendar(ttk.Frame):
             self.entry.icursor(new_pos)
 
     def _open_calendar(self):
-        try:
-            from tkcalendar import Calendar
-        except ImportError:
+        if not _TKCALENDAR_OK:
             messagebox.showerror("Ошибка", "Модуль tkcalendar не установлен")
             return
         top = tk.Toplevel(self)
         top.title("Выбор даты")
         top.transient(self)
         top.grab_set()
-        cal = Calendar(top, date_pattern="dd.mm.yyyy", locale="ru_RU", firstweekday="monday")
+        cal = _TkCalendar(top, date_pattern="dd.mm.yyyy", firstweekday="monday")
         cal.pack(padx=10, pady=10)
         def on_select():
             self.var.set(cal.get_date())
@@ -167,51 +165,122 @@ class DateEntryWithCalendar(ttk.Frame):
 
 
 class ProcedureSelectDialog(tk.Toplevel):
-    """Диалог выбора процедуры при запуске — только 3 кнопки."""
+    """Главное меню: выбор процедуры + управление БД и обновлениями."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("Выбор")
+        self.title(APP_NAME)
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
         self.selected_proc = None
+        self.selected_action = None  # 'export_db', 'import_db', 'check_updates'
 
-        # Три большие кнопки — только номера, без пояснений
+        # Главный контейнер
+        main = ttk.Frame(self, padding=16)
+        main.pack(fill="both", expand=True)
+
+        # === Заголовок ===
+        ttk.Label(
+            main, text="Выбор процедуры", font=("", 16, "bold")
+        ).pack(pady=(0, 8))
+
+        # === Кнопки выбора процедуры (3 большие) ===
         procedures_list = [p for p in list_procedures()]
         procedures_list.sort(key=lambda p: p.code)
 
-        for i, proc in enumerate(procedures_list):
+        proc_frame = ttk.Frame(main)
+        proc_frame.pack(fill="both", expand=True, pady=8)
+
+        for proc in procedures_list:
             color = PROC_COLORS.get(proc.code, "#999")
-            # Для светлых цветов — тёмный текст, для тёмных — белый
             fg = "white" if color not in ("#E6EBE0", "#FDD9B5", "#D4FCEE") else "black"
             btn = tk.Button(
-                self,
+                proc_frame,
                 text=proc.code,
-                font=("", 20, "bold"),
+                font=("", 18, "bold"),
                 bg=color,
                 fg=fg,
                 activebackground=color,
                 activeforeground=fg,
                 relief="flat",
                 cursor="hand2",
-                height=3,
+                height=2,
                 command=lambda p=proc.code: self._select(p),
             )
-            btn.pack(fill="both", expand=True, padx=12, pady=8)
+            btn.pack(fill="x", expand=True, padx=4, pady=4)
 
-        # Центрируем окно на экране после отрисовки виджетов
+        # === Разделитель ===
+        ttk.Separator(main, orient="horizontal").pack(fill="x", pady=10)
+
+        # === Кнопки управления БД и обновлениями ===
+        actions_frame = ttk.Frame(main)
+        actions_frame.pack(fill="x", pady=4)
+
+        ttk.Button(
+            actions_frame, text="📤 Выгрузить БД",
+            command=self._action_export
+        ).pack(side="left", fill="x", expand=True, padx=2)
+
+        ttk.Button(
+            actions_frame, text="📥 Загрузить БД",
+            command=self._action_import
+        ).pack(side="left", fill="x", expand=True, padx=2)
+
+        ttk.Button(
+            actions_frame, text="🔄 Обновления",
+            command=self._action_update
+        ).pack(side="left", fill="x", expand=True, padx=2)
+
+        # === Выход ===
+        ttk.Button(
+            main, text="Выход", command=self._cancel
+        ).pack(fill="x", pady=(8, 0))
+
+        # Центрируем окно относительно родительского
+        self._center_on_parent(parent)
+
+    def _center_on_parent(self, parent):
+        """Центрирует окно относительно parent или экрана."""
         self.update_idletasks()
         w = self.winfo_reqwidth()
         h = self.winfo_reqheight()
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        x = max(0, (sw - w) // 2)
-        y = max(0, (sh - h) // 2)
+        if parent and parent.winfo_viewable():
+            # Относительно parent
+            px = parent.winfo_rootx()
+            py = parent.winfo_rooty()
+            pw = parent.winfo_width()
+            ph = parent.winfo_height()
+            x = px + (pw - w) // 2
+            y = py + (ph - h) // 2
+        else:
+            # По центру экрана
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+            x = max(0, (sw - w) // 2)
+            y = max(0, (sh - h) // 2)
         self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _select(self, proc_code: str):
         self.selected_proc = proc_code
+        self.selected_action = "procedure"
+        self.destroy()
+
+    def _action_export(self):
+        self.selected_action = "export_db"
+        self.destroy()
+
+    def _action_import(self):
+        self.selected_action = "import_db"
+        self.destroy()
+
+    def _action_update(self):
+        self.selected_action = "check_updates"
+        self.destroy()
+
+    def _cancel(self):
+        self.selected_proc = None
+        self.selected_action = "cancel"
         self.destroy()
 
 
@@ -240,10 +309,71 @@ class PermitApp(tk.Tk):
         self._refresh_db_lists()
 
     def _choose_procedure(self):
-        """Модальный диалог выбора процедуры."""
-        dlg = ProcedureSelectDialog(self)
-        self.wait_window(dlg)
-        self.procedure_code = dlg.selected_proc
+        """Модальный диалог: выбор процедуры / действие / выход."""
+        while True:
+            dlg = ProcedureSelectDialog(self)
+            self.wait_window(dlg)
+
+            action = getattr(dlg, 'selected_action', None)
+            code = dlg.selected_proc
+
+            if action == "cancel" or code is None:
+                # Выход
+                self.procedure_code = None
+                return
+
+            if action == "export_db":
+                export_db_dialog(self, get_db_path(), "permits_export_XXXX.json")
+                continue  # Показываем диалог снова
+
+            if action == "import_db":
+                self._import_db()
+                continue
+
+            if action == "check_updates":
+                dlg_upd = UpdateDialog(self, APP_VERSION, "dazvol_u_zonu.exe")
+                self.wait_window(dlg_upd)
+                continue
+
+            if action == "procedure" and code:
+                self.procedure_code = code
+                return
+
+            # На всякий случай
+            self.procedure_code = code
+            return
+
+    def _import_db(self):
+        """Импорт БД из JSON файла."""
+        path = filedialog.askopenfilename(
+            title="Выберите файл БД (JSON)",
+            filetypes=[("JSON", "*.json"), ("Все файлы", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            import json as _json
+            with open(path, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+            if not isinstance(data, list):
+                data = [data]
+            db = UnifiedPermitDB()
+            imported = 0
+            for rec in data:
+                proc_code = rec.get("procedure_code") or rec.get("procedure") or "14.3"
+                search_type = rec.get("search_type") or (
+                    "org" if rec.get("org") or rec.get("organization") else "fio"
+                )
+                db.upsert(rec, proc_code, search_type)
+                imported += 1
+            db.close()
+            messagebox.showinfo(
+                "Импорт БД",
+                f"Импортировано записей: {imported}\n\n"
+                f"Файл: {path}",
+            )
+        except Exception as e:
+            messagebox.showerror("Ошибка импорта БД", f"Не удалось импортировать:\n{e}")
 
     def _init_variables(self):
         """Инициализация переменных формы в зависимости от процедуры."""

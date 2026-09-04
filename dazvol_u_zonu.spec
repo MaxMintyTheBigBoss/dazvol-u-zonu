@@ -10,11 +10,23 @@ a = Analysis(
         ('templates', 'templates'),
         ('permit_update_gui.py', '.'),
         ('permitunified', 'permitunified'),
+        # Данные babel — без них tkcalendar ломает Tcl при locale="ru_RU"
+        # Сейчас locale убран, но оставим на всякий случай
     ],
     hiddenimports=[
         'tkcalendar',
         'babel',
         'babel.numbers',
+        'babel.dates',
+        'babel.messages',
+        'babel.core',
+        'babel.localedata',
+        'babel.localtime',
+        'babel.support',
+        'babel.plural',
+        'babel.unknown',
+        'babel._compat',
+        'babel._numbers',
         'openpyxl',
         'permit_update',
         'permit_update_gui',
@@ -25,7 +37,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['rthook_tcl.py'],
     excludes=[],
     noarchive=False,
     optimize=0,
@@ -44,8 +56,8 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # без UPX
-    runtime_tmpdir=None,  # распаковка в каталог .exe, а не в Temp
+    upx=False,
+    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
