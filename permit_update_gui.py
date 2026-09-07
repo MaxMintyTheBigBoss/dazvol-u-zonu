@@ -4,6 +4,8 @@
 Импортируется из app.py, app_145.py, app_19171.py.
 """
 import os
+import sys
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -19,7 +21,7 @@ class UpdateDialog(tk.Toplevel):
     def __init__(self, parent, current_version, exe_name):
         super().__init__(parent)
         self.title("Проверка обновлений")
-        self.geometry("560x420")
+        self.geometry("560x440")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -32,8 +34,14 @@ class UpdateDialog(tk.Toplevel):
         # --- Вкладка 1: онлайн ---
         tab1 = ttk.Frame(nb)
         nb.add(tab1, text="🌐 Онлайн")
-        ttk.Button(tab1, text="Проверить на GitHub",
-                   command=self._check_online).pack(pady=10)
+        
+        btn_frame = ttk.Frame(tab1)
+        btn_frame.pack(pady=8)
+        self.btn_check_online = ttk.Button(
+            btn_frame, text="Проверить на GitHub", command=self._check_online
+        )
+        self.btn_check_online.pack(side="left", padx=4)
+
         self.online_text = tk.Text(tab1, wrap="word", height=14, state="disabled")
         self.online_text.pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -53,11 +61,14 @@ class UpdateDialog(tk.Toplevel):
         row = ttk.Frame(tab2)
         row.pack(fill="x", padx=12)
         ttk.Entry(row, textvariable=self.file_path_var, state="readonly").pack(
-            side="left", fill="x", expand=True)
+            side="left", fill="x", expand=True
+        )
         ttk.Button(row, text="Выбрать…", command=self._pick_zip).pack(
-            side="left", padx=4)
-        ttk.Button(tab2, text="Установить обновление",
-                   command=self._apply_local).pack(pady=8)
+            side="left", padx=4
+        )
+        ttk.Button(
+            tab2, text="Установить обновление", command=self._apply_local
+        ).pack(pady=8)
         self.local_status = ttk.Label(tab2, text="", foreground="gray")
         self.local_status.pack()
 
@@ -79,42 +90,63 @@ class UpdateDialog(tk.Toplevel):
             "Email: al.vl.solo@yandex.by"
         )
         ttk.Label(tab3, text=help_txt, justify="left", wraplength=520).pack(
-            padx=12, pady=12, anchor="nw")
+            padx=12, pady=12, anchor="nw"
+        )
 
     def _set_online_text(self, text):
+        """Безопасное обновление текста в виде виджета."""
         self.online_text.configure(state="normal")
         self.online_text.delete("1.0", "end")
         self.online_text.insert("1.0", text)
         self.online_text.configure(state="disabled")
 
     def _check_online(self):
+        """Запуск проверки в отдельном потоке, чтобы не вешать GUI."""
         self._set_online_text("Проверяю GitHub…")
-        self.update_idletasks()
-        chk = permit_update.OnlineChecker(OWNER, REPO)
-        result = chk.check(self.current_version)
+        self.btn_check_online.configure(state="disabled")
+
+        def run():
+            chk = permit_update.OnlineChecker(OWNER, REPO)
+            result = chk.check(self.current_version)
+            
+            # Возвращаем управление в главный поток Tkinter через after()
+            self.after(0, self._on_online_check_done, result)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_online_check_done(self, result):
+        """Обработка ответа после завершения фонового запроса."""
+        self.btn_check_online.configure(state="normal")
+
         if result is None:
             self._set_online_text(
                 "Не удалось подключиться к GitHub.\n"
-                "Проверьте интернет-соединение или используйте вкладку 'Из файла'.")
+                "Проверьте интернет-соединение или используйте вкладку 'Из файла'."
+            )
             return
+
         if not result["has_update"]:
             self._set_online_text(
                 f"Вы используете последнюю версию ({self.current_version}).\n\n"
-                f"Последний релиз: {result['tag']}")
+                f"Последний релиз: {result['tag']}"
+            )
             return
+
         text = (
             f"Доступно обновление!\n\n"
             f"Текущая:   {self.current_version}\n"
             f"Доступна:  {result['tag']}  ({result['name']})\n\n"
             f"Скачайте архив по ссылке и установите через вкладку 'Из файла':\n"
             f"{result['html_url']}\n\n"
-            "Что нового:\n" + (result["body"][:500] or "(без описания)"))
+            "Что нового:\n" + (result["body"][:500] or "(без описания)")
+        )
         self._set_online_text(text)
 
     def _pick_zip(self):
         path = filedialog.askopenfilename(
             title="Выберите файл обновления (.zip)",
-            filetypes=[("ZIP-архив", "*.zip"), ("Все файлы", "*.*")])
+            filetypes=[("ZIP-архив", "*.zip"), ("Все файлы", "*.*")],
+        )
         if path:
             self.file_path_var.set(path)
             self.local_status.configure(text="", foreground="gray")
@@ -124,21 +156,32 @@ class UpdateDialog(tk.Toplevel):
         if not path or not os.path.exists(path):
             messagebox.showerror("Обновление", "Сначала выберите файл обновления.")
             return
+
         if not messagebox.askyesno(
             "Подтверждение",
             "Установить обновление из файла?\n"
-            "Будет создан бэкап текущего exe в подпапке _backup/."):
+            "Будет создан бэкап текущего .exe в подпапке _backup/.",
+        ):
             return
+
         updater = permit_update.LocalUpdater(self.exe_name)
         ok, msg = updater.apply(path)
+
         if ok:
             self.local_status.configure(text="✅ " + msg, foreground="green")
-            messagebox.showinfo(
+            if messagebox.askyesno(
                 "Обновление установлено",
-                msg + "\n\nПерезапустите программу для применения изменений.")
+                f"{msg}\n\nПерезапустить программу сейчас для применения изменений?",
+            ):
+                self._restart_app()
         else:
             self.local_status.configure(text="❌ " + msg, foreground="red")
             messagebox.showerror("Ошибка обновления", msg)
+
+    def _restart_app(self):
+        """Безопасный перезапуск приложения."""
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 
 
 def export_db_dialog(app, db_path, default_name):
@@ -151,28 +194,42 @@ def export_db_dialog(app, db_path, default_name):
     if not os.path.exists(db_path):
         messagebox.showinfo("Экспорт БД", "База данных пуста или не создана.")
         return
+
     import permit_db as pdb_mod
     from datetime import datetime
+
     stamp = datetime.now().strftime("%Y-%m-%d")
     out = filedialog.asksaveasfilename(
         title="Выгрузить базу пропусков",
         defaultextension=".json",
         initialfile=default_name.replace("XXXX", stamp),
-        filetypes=[("JSON", "*.json"), ("Excel", "*.xlsx"), ("CSV", "*.csv")])
+        filetypes=[
+            ("JSON", "*.json"),
+            ("Excel", "*.xlsx"),
+            ("CSV", "*.csv"),
+        ],
+    )
     if not out:
         return
+
     ext = os.path.splitext(out)[1].lower()
-    fmt = {"xlsx": "excel", ".xlsx": "excel",
-           "csv": "csv", ".csv": "csv"}.get(ext, "json")
+    fmt = {"xlsx": "excel", ".xlsx": "excel", "csv": "csv", ".csv": "csv"}.get(
+        ext, "json"
+    )
+
     try:
         db = pdb_mod.PermitDB(db_path)
         res = db.export(out, fmt=fmt)
         db.close()
+
         if fmt == "excel" and res is None:
-            messagebox.showerror("Экспорт БД",
+            messagebox.showerror(
+                "Экспорт БД",
                 "Не удалось экспортировать в Excel (нужен модуль openpyxl).\n"
-                "Установите: pip install openpyxl")
+                "Установите: pip install openpyxl",
+            )
             return
-        messagebox.showinfo("Экспорт БД", "База выгружена:\n" + out)
+
+        messagebox.showinfo("Экспорт БД", f"База выгружена:\n{out}")
     except Exception as e:
-        messagebox.showerror("Экспорт БД", "Ошибка: %s" % e)
+        messagebox.showerror("Экспорт БД", f"Ошибка: {e}")

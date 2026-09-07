@@ -3,12 +3,13 @@
 Унифицированный генератор документов для всех процедур.
 Использует procedures.py (конфиг) и db.py (БД).
 """
-import os
-import sys
 import json
+import logging
+import os
 import re
-from datetime import datetime
+import sys
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -16,20 +17,22 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from permitunified.procedures import get_procedure, ProcedureConfig
 from permitunified.db import UnifiedPermitDB, get_db_path
+from permitunified.procedures import ProcedureConfig, get_procedure
 
+logger = logging.getLogger(__name__)
 
-# Регулярка для плейсхолдеров
+# Регулярное выражение для поиска плейсхолдеров
 _PH_RE = re.compile(r"\*{0,2}(Placeholder_\d+(?:\.\d+)?)\*{0,2}")
 
 
 def resource_path() -> str:
     """Путь к ресурсам (совместимо с PyInstaller)."""
-    base = getattr(sys, "_MEIPASS", None)
-    if base:
-        return base
-    return str(Path(__file__).parent.parent)
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.argv[0])))
+    else:
+        base = Path(__file__).resolve().parent.parent
+    return str(base)
 
 
 def template_dir() -> str:
@@ -38,7 +41,8 @@ def template_dir() -> str:
 
 def sanitize(s: str, default: str = "файл") -> str:
     illegal = '<>:"/\\|?*'
-    return ("".join(c for c in s if c not in illegal).strip() or default)
+    cleaned = "".join(c for c in str(s) if c not in illegal).strip()
+    return cleaned or default
 
 
 def today_dmy() -> str:
@@ -46,10 +50,10 @@ def today_dmy() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Замена плейсхолдеров (исправленная версия: подчёркивает только значение)
+# Замена плейсхолдеров (подчёркивает только подставляемое значение)
 # ---------------------------------------------------------------------------
 def _inline_replace(paragraph, mapping: Dict[str, str]) -> None:
-    runs = paragraph._p.findall(qn('w:r'))
+    runs = paragraph._p.findall(qn("w:r"))
     if not runs:
         return
 
@@ -57,9 +61,9 @@ def _inline_replace(paragraph, mapping: Dict[str, str]) -> None:
     segments = []
     full_parts = []
     for r in runs:
-        texts = [t.text or "" for t in r.findall(qn('w:t'))]
+        texts = [t.text or "" for t in r.findall(qn("w:t"))]
         txt = "".join(texts)
-        rpr = r.find(qn('w:rPr'))
+        rpr = r.find(qn("w:rPr"))
         segments.append((rpr, txt))
         full_parts.append(txt)
     full = "".join(full_parts)
@@ -67,7 +71,7 @@ def _inline_replace(paragraph, mapping: Dict[str, str]) -> None:
     if "Placeholder_" not in full:
         return
 
-    # Строим карту глобальной позиции -> (rpr, text)
+    # Карта позиций
     boundaries = []
     acc = 0
     for _, txt in segments:
@@ -99,7 +103,8 @@ def _inline_replace(paragraph, mapping: Dict[str, str]) -> None:
             seg_txt = full[pos:s]
             if seg_txt:
                 new_segments.append((rpr_at(pos), seg_txt, False))
-        # Значение — подчёркнутое
+
+        # Заменяемое значение подчёркивается
         new_segments.append((rpr_at(s), val, True))
         pos = e
         replaced = True
@@ -110,35 +115,35 @@ def _inline_replace(paragraph, mapping: Dict[str, str]) -> None:
     if pos < len(full):
         new_segments.append((rpr_at(pos), full[pos:], False))
 
-    # Удаляем старые run'ы, вставляем новые
+    # Замена run'ов
     for r in runs:
         paragraph._p.remove(r)
 
     for rpr, txt, underline in new_segments:
         if not txt:
             continue
-        run_el = OxmlElement('w:r')
+        run_el = OxmlElement("w:r")
         if rpr is not None:
             run_el.append(deepcopy(rpr))
         if underline:
-            rpr_u = run_el.find(qn('w:rPr'))
+            rpr_u = run_el.find(qn("w:rPr"))
             if rpr_u is None:
-                rpr_u = OxmlElement('w:rPr')
+                rpr_u = OxmlElement("w:rPr")
                 run_el.append(rpr_u)
-            u = rpr_u.find(qn('w:u'))
+            u = rpr_u.find(qn("w:u"))
             if u is None:
-                u = OxmlElement('w:u')
+                u = OxmlElement("w:u")
                 rpr_u.append(u)
-            u.set(qn('w:val'), "single")
-        t = OxmlElement('w:t')
-        t.set(qn('{http://www.w3.org/XML/1998/namespace}space'), "preserve")
+            u.set(qn("w:val"), "single")
+        t = OxmlElement("w:t")
+        t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
         t.text = txt
         run_el.append(t)
         paragraph._p.append(run_el)
 
 
 def fill_doc(doc: Document, mapping: Dict[str, str]) -> Document:
-    """Заменяет плейсхолдеры во всех абзацах и таблицах документа."""
+    """Заменяет плейсхолдеры во всех параграфах и таблицах документа."""
     for para in doc.paragraphs:
         _inline_replace(para, mapping)
     for table in doc.tables:
@@ -150,11 +155,11 @@ def fill_doc(doc: Document, mapping: Dict[str, str]) -> Document:
 
 
 # ---------------------------------------------------------------------------
-# Специфичные сборщики документов по процедурам
+# Вспомогательные функции
 # ---------------------------------------------------------------------------
 
 def join_districts(districts: List[str]) -> str:
-    return ", ".join(districts)
+    return ", ".join(d for d in districts if d)
 
 
 def join_objects(objects: List[Dict[str, str]], custom: str = "") -> str:
@@ -163,7 +168,7 @@ def join_objects(objects: List[Dict[str, str]], custom: str = "") -> str:
         if isinstance(o, dict):
             v = (o.get("object") or "").strip()
         else:
-            v = (o or "").strip()
+            v = str(o).strip()
         if v:
             lst.append(v)
     if custom and custom.strip():
@@ -172,7 +177,7 @@ def join_objects(objects: List[Dict[str, str]], custom: str = "") -> str:
 
 
 def load_reference() -> List[Dict[str, str]]:
-    """Справочник кладбищ: список {district, object}."""
+    """Справочник объектов: список {district, object}."""
     path = os.path.join(template_dir(), "справочник.docx")
     entries: List[Dict[str, str]] = []
     if not os.path.exists(path):
@@ -186,19 +191,21 @@ def load_reference() -> List[Dict[str, str]]:
                 obj = "кладбище о.н.п. " + parts[2].strip()
                 if district and obj:
                     entries.append({"district": district, "object": obj})
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Ошибка чтения справочника: {e}")
     return entries
 
 
 def filter_objects_by_districts(reference: List[Dict[str, str]], districts: List[str]) -> List[Dict[str, str]]:
-    """Только кладбища, относящиеся к выбранным районам."""
     allowed = set(districts)
     return [r for r in reference if r["district"] in allowed]
 
 
+# ---------------------------------------------------------------------------
+# Сборщики словарей замен (Mappings)
+# ---------------------------------------------------------------------------
+
 def build_mapping_143(data: Dict) -> Dict:
-    """Собирает mapping для процедуры 14.3"""
     districts = data.get("districts", [])
     mapping = {
         "Placeholder_1.1": data.get("last_name", ""),
@@ -222,7 +229,6 @@ def build_mapping_143(data: Dict) -> Dict:
 
 
 def build_mapping_145(data: Dict) -> Dict:
-    """Собирает mapping для процедуры 14.5"""
     districts = data.get("districts", [])
     mapping = {
         "Placeholder_1.1": data.get("last_name", ""),
@@ -232,7 +238,7 @@ def build_mapping_145(data: Dict) -> Dict:
         "Placeholder_3": data.get("id_number", ""),
         "Placeholder_4": join_districts(districts),
         "Placeholder_5": data.get("objects", ""),
-        "Placeholder_6": "для вывоза имущества",  # фиксировано для 14.5
+        "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
         "Placeholder_12": data.get("car_make", ""),
@@ -246,7 +252,6 @@ def build_mapping_145(data: Dict) -> Dict:
 
 
 def build_mapping_19171_individual(data: Dict, person: Dict) -> Dict:
-    """Mapping для индивидуального пропуска 19.17.1"""
     districts = data.get("districts", [])
     return {
         "Placeholder_10.1": person.get("last_name", ""),
@@ -264,13 +269,13 @@ def build_mapping_19171_individual(data: Dict, person: Dict) -> Dict:
 
 
 def build_mapping_19171_transport(data: Dict, vehicle: Dict) -> Dict:
-    """Mapping для транспортного пропуска 19.17.1"""
     districts = data.get("districts", [])
     org_rep_last = data.get("org_rep_last", "")
     org_rep_first = data.get("org_rep_first", "")
     org_rep_middle = data.get("org_rep_middle", "")
     if not org_rep_last and not org_rep_first and not org_rep_middle:
         org_rep_last = data.get("org_info", "")
+
     return {
         "Placeholder_1.1": org_rep_last,
         "Placeholder_1.2": org_rep_first,
@@ -287,18 +292,17 @@ def build_mapping_19171_transport(data: Dict, vehicle: Dict) -> Dict:
 
 
 # ---------------------------------------------------------------------------
-# Основные функции генерации
+# Генераторы отдельных документов
 # ---------------------------------------------------------------------------
 
 def make_application_143(data: Dict) -> Document:
     doc = Document(os.path.join(template_dir(), "Заявление_14.3.docx"))
     mapping = build_mapping_143(data)
     fill_doc(doc, mapping)
-    # Блок сопровождающих (упрощённый — только таблицы)
     return doc
 
 
-def make_individual_143(data: Dict, person: Dict = None) -> Document:
+def make_individual_143(data: Dict, person: Optional[Dict] = None) -> Document:
     person = person if person is not None else data
     doc = Document(os.path.join(template_dir(), "Пропуск_индивидуальный.docx"))
     mapping = {
@@ -344,12 +348,11 @@ def make_application_145(data: Dict) -> Document:
 
 def make_permit_cargo(data: Dict) -> Document:
     doc = Document(os.path.join(template_dir(), "Пропуск_вывоз_имущества.docx"))
-    districts = data.get("districts", [])
     mapping = {
         "Placeholder_1.1": data.get("last_name", ""),
         "Placeholder_1.2": data.get("first_name", ""),
         "Placeholder_1.3": data.get("middle_name", ""),
-        "Placeholder_4": join_districts(districts),
+        "Placeholder_4": join_districts(data.get("districts", [])),
         "Placeholder_5": data.get("objects", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -362,12 +365,11 @@ def make_permit_cargo(data: Dict) -> Document:
 
 def make_transport_145(data: Dict) -> Document:
     doc = Document(os.path.join(template_dir(), "Пропуск_транспортный.docx"))
-    districts = data.get("districts", [])
     mapping = {
         "Placeholder_1.1": data.get("last_name", ""),
         "Placeholder_1.2": data.get("first_name", ""),
         "Placeholder_1.3": data.get("middle_name", ""),
-        "Placeholder_4": join_districts(districts),
+        "Placeholder_4": join_districts(data.get("districts", [])),
         "Placeholder_5": data.get("objects", ""),
         "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
@@ -395,39 +397,36 @@ def make_transport_19171(data: Dict, vehicle: Dict) -> Document:
 
 
 # ---------------------------------------------------------------------------
-# Высокоуровневая генерация по коду процедуры
+# Главный вызов генерации пакета
 # ---------------------------------------------------------------------------
 
-def generate_all(data: Dict, output_dir: str = None, procedure_code: str = "14.3") -> List[str]:
-    """
-    Главная функция генерации.
-    Возвращает список путей к созданным файлам.
-    """
+def generate_all(data: Dict, output_dir: Optional[str] = None, procedure_code: str = "14.3") -> List[str]:
+    """Главный генератор пропусков."""
     if output_dir is None:
-        output_dir = os.path.join(get_db_path().replace("permits_unified.sqlite", ""), "output")
-    stamp = datetime.now().strftime("%d.%m.%Y.%H.%M")
+        output_dir = os.path.join(os.path.dirname(get_db_path()), "output")
+
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     out = os.path.join(output_dir, stamp)
     os.makedirs(out, exist_ok=True)
 
     created = []
     proc = get_procedure(procedure_code)
 
-    # Общие данные для имени файла
     if procedure_code == "19.17.1":
         base_name = sanitize(data.get("org_short", "Организация"), "Организация")
     else:
         base_name = sanitize(data.get("last_name", "Заявитель"), "Заявитель")
 
-    # 1. Заявление (если предусмотрено)
+    # 1. Заявления
     if proc.has_application:
+        doc = None
         if procedure_code == "14.3":
             doc = make_application_143(data)
             fname = f"Заявление_{base_name}.docx"
         elif procedure_code == "14.5":
             doc = make_application_145(data)
             fname = f"Заявление_14.5_{base_name}.docx"
-        else:
-            doc = None
+
         if doc:
             p = os.path.join(out, fname)
             doc.save(p)
@@ -480,21 +479,19 @@ def generate_all(data: Dict, output_dir: str = None, procedure_code: str = "14.3
                 doc.save(p)
                 created.append(p)
 
-    # Запись в БД
+    # Сохранение в БД
     _db_remember(data, procedure_code)
 
     return created
 
 
 # ---------------------------------------------------------------------------
-# БД — запоминание и поиск
+# Безопасное взаимодействие с БД без утечек ресурсов
 # ---------------------------------------------------------------------------
 
-def _db_remember(data: Dict, procedure_code: str):
-    """Сохраняет запись в unified БД."""
+def _db_remember(data: Dict, procedure_code: str) -> None:
     db = UnifiedPermitDB(get_db_path())
     try:
-        # Миграция старых JSON
         legacy_map = {
             "14.3": ("permit_history.json", "fio"),
             "14.5": ("permit_history_145.json", "fio"),
@@ -507,7 +504,6 @@ def _db_remember(data: Dict, procedure_code: str):
                 db.migrate_from_json(legacy_path, procedure_code, stype)
 
         if procedure_code == "19.17.1":
-            # Поиск по организации
             org_key = (data.get("org_short", "") or data.get("org_info", "")).strip().lower()
             rec = {
                 "org_key": org_key,
@@ -529,8 +525,6 @@ def _db_remember(data: Dict, procedure_code: str):
             }
             db.upsert(rec, procedure_code, "org")
         else:
-            # Поиск по ФИО
-            key = " ".join(str(data.get(k, "")) for k in ("last_name", "first_name", "middle_name") if data.get(k)).strip().lower()
             rec = {
                 "last_name": data.get("last_name", ""),
                 "first_name": data.get("first_name", ""),
@@ -550,13 +544,36 @@ def _db_remember(data: Dict, procedure_code: str):
 
 
 def db_find(fio: str, procedure_code: str) -> Optional[Dict]:
-    """Поиск по ФИО (для 14.3 и 14.5)."""
-    return UnifiedPermitDB(get_db_path()).find(fio, procedure_code, "fio")
+    db = UnifiedPermitDB(get_db_path())
+    try:
+        return db.find(fio, procedure_code, "fio")
+    finally:
+        db.close()
 
 
 def db_find_org(org_key: str, procedure_code: str) -> Optional[Dict]:
-    """Поиск по организации (для 19.17.1)."""
-    return UnifiedPermitDB(get_db_path()).find(org_key, procedure_code, "org")
+    db = UnifiedPermitDB(get_db_path())
+    try:
+        return db.find(org_key, procedure_code, "org")
+    finally:
+        db.close()
+
+
+def db_list_fio(procedure_code: str) -> List[str]:
+    db = UnifiedPermitDB(get_db_path())
+    try:
+        # С заменяющим символом % для подгрузки списка при автодополнении
+        return db.find_like("%", procedure_code, "fio", limit=200)
+    finally:
+        db.close()
+
+
+def db_list_org(procedure_code: str) -> List[str]:
+    db = UnifiedPermitDB(get_db_path())
+    try:
+        return db.find_like("%", procedure_code, "org", limit=200)
+    finally:
+        db.close()
 
 
 def db_list_fio(procedure_code: str) -> List[str]:

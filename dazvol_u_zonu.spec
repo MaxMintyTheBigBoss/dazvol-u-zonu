@@ -1,6 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files
+
 block_cipher = None
+
+# Собираем данные локалей для корректной работы tkcalendar / babel
+babel_datas = collect_data_files('babel')
 
 a = Analysis(
     ['app.py'],
@@ -10,8 +15,11 @@ a = Analysis(
         ('templates', 'templates'),
         ('permit_update_gui.py', '.'),
         ('permitunified', 'permitunified'),
-    ],
+    ] + babel_datas,
     hiddenimports=[
+        'docx',
+        'docx.oxml',
+        'docx.oxml.ns',
         'tkcalendar',
         'babel',
         'babel.numbers',
@@ -27,9 +35,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['rthook_tcl.py'],
-    # КРИТИЧНО: исключаем pkg_resources и setuptools
-    # Из-за них tkinter / tkcalendar тянет jaraco.text, который
-    # пытается прочитать Lorem ipsum.txt и падает.
+    # Исключаем pkg_resources и setuptools (защита от вылета jaraco.text)
     excludes=[
         'pkg_resources',
         'pkg_resources.py2_warn',
@@ -53,7 +59,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='dazvol_u_zony0.0.7',  # имя с версией
+    name='dazvol_u_zonu_ver.0.0.8',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
