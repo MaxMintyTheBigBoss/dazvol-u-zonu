@@ -905,8 +905,7 @@ class VehicleDialog(tk.Toplevel):
 
 def main():
     app = PermitApp()
-    if hasattr(app, 'procedure_code') and app.procedure_code:
-        app.mainloop()
+    app.mainloop()
 
 
 if __name__ == "__main__":
