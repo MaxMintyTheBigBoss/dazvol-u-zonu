@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.10"
+APP_VERSION = "0.0.11"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -464,19 +464,9 @@ class PermitApp(tk.Tk):
         self.status_bar.pack(fill="x", padx=8, pady=(0, 8))
 
     def _change_procedure(self):
-        if messagebox.askyesno("Смена процедуры", "Текущие данные формы будут потеряны. Продолжить?"):
-            self.withdraw()
-            self._choose_procedure()
-            if not self.procedure_code:
-                self.destroy()
-                return
-            self.procedure = get_procedure(self.procedure_code)
-            self.configure(bg=PROC_COLORS.get(self.procedure_code, BG_COLOR))
-            for widget in self.winfo_children():
-                widget.destroy()
-            self._init_variables()
-            self._build_ui()
-            self.deiconify()
+        """Кнопка 'Сменить процедуру' — возврат в меню."""
+        if messagebox.askyesno("Смена процедуры", "Текущие данные формы будут потеряны. Продолжить?", parent=self):
+            self.show_menu()
 
     def _build_tab_applicant(self, parent):
         pad = {"padx": 6, "pady": 4}
