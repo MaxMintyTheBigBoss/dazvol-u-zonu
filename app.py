@@ -5,6 +5,7 @@
 """
 import os
 import sys
+from typing import Optional
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -61,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.8"
+APP_VERSION = "0.0.9"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -167,35 +168,33 @@ class DateEntryWithCalendar(ttk.Frame):
         ttk.Button(top, text="Выбрать", command=on_select).pack(pady=5)
 
 
-class ProcedureSelectDialog(tk.Toplevel):
-    """Главное меню: выбор процедуры + управление БД и обновлениями."""
+class MainMenuFrame(ttk.Frame):
+    """Главное меню: выбор процедуры + управление БД + обновления + о программе.
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title(APP_NAME)
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.selected_proc = None
-        self.selected_action = None
+    Реализован как Frame (НЕ Toplevel) внутри PermitApp. Это полностью исключает
+    проблемы с grab_set/wait_window, которые приводили к закрытию приложения.
+    """
 
-        main = ttk.Frame(self, padding=16)
-        main.pack(fill="both", expand=True)
+    def __init__(self, master, app: "PermitApp"):
+        super().__init__(master, padding=16)
+        self.app = app
+        self._build()
 
-        ttk.Label(main, text="Выбор процедуры", font=("", 16, "bold")).pack(pady=(0, 8))
+    def _build(self):
+        ttk.Label(self, text="Выбор процедуры", font=("", 16, "bold")).pack(pady=(0, 8))
 
-        # Безопасное получение списка процедур
-        raw_procedures = list_procedures()
-        proc_frame = ttk.Frame(main)
+        # Кнопки процедур
+        procedures = list_procedures()
+        procedures.sort(key=lambda p: p.code)
+        proc_frame = ttk.Frame(self)
         proc_frame.pack(fill="both", expand=True, pady=8)
 
-        for p_item in raw_procedures:
-            code = p_item.code if hasattr(p_item, 'code') else str(p_item)
-            color = PROC_COLORS.get(code, "#999")
+        for p in procedures:
+            color = PROC_COLORS.get(p.code, "#999")
             fg = "white" if color not in ("#E6EBE0", "#FDD9B5", "#D4FCEE") else "black"
             btn = tk.Button(
                 proc_frame,
-                text=code,
+                text=p.code,
                 font=("", 18, "bold"),
                 bg=color,
                 fg=fg,
@@ -204,74 +203,36 @@ class ProcedureSelectDialog(tk.Toplevel):
                 relief="flat",
                 cursor="hand2",
                 height=2,
-                command=lambda c=code: self._select(c),
+                command=lambda c=p.code: self.app.open_procedure(c),
             )
             btn.pack(fill="x", expand=True, padx=4, pady=4)
 
-        ttk.Separator(main, orient="horizontal").pack(fill="x", pady=10)
+        ttk.Separator(self, orient="horizontal").pack(fill="x", pady=10)
 
-        actions_frame = ttk.Frame(main)
-        actions_frame.pack(fill="x", pady=4)
+        # Кнопки действий
+        actions = ttk.Frame(self)
+        actions.pack(fill="x", pady=4)
 
-        ttk.Button(actions_frame, text="📤 Выгрузить БД", command=self._action_export).pack(side="left", fill="x", expand=True, padx=2)
-        ttk.Button(actions_frame, text="📥 Загрузить БД", command=self._action_import).pack(side="left", fill="x", expand=True, padx=2)
-        ttk.Button(actions_frame, text="🔄 Обновления", command=self._action_update).pack(side="left", fill="x", expand=True, padx=2)
-        ttk.Button(actions_frame, text="ℹ️ О программе", command=self._action_about).pack(side="left", fill="x", expand=True, padx=2)
+        ttk.Button(actions, text="📤 Выгрузить БД",
+                   command=self.app.action_export_db).pack(side="left", fill="x", expand=True, padx=2)
+        ttk.Button(actions, text="📥 Загрузить БД",
+                   command=self.app.action_import_db).pack(side="left", fill="x", expand=True, padx=2)
+        ttk.Button(actions, text="🔄 Обновления",
+                   command=self.app.action_check_updates).pack(side="left", fill="x", expand=True, padx=2)
+        ttk.Button(actions, text="ℹ️ О программе",
+                   command=self.app.action_about).pack(side="left", fill="x", expand=True, padx=2)
 
-        ttk.Button(main, text="Выход", command=self._cancel).pack(fill="x", pady=(8, 0))
-        self._center_on_parent(parent)
-
-    def _center_on_parent(self, parent):
-        self.update_idletasks()
-        w = self.winfo_reqwidth()
-        h = self.winfo_reqheight()
-        if parent and parent.winfo_viewable():
-            px, py = parent.winfo_rootx(), parent.winfo_rooty()
-            pw, ph = parent.winfo_width(), parent.winfo_height()
-            x = px + (pw - w) // 2
-            y = py + (ph - h) // 2
-        else:
-            sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-            x, y = max(0, (sw - w) // 2), max(0, (sh - h) // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
-
-    def _select(self, proc_code: str):
-        self.selected_proc = proc_code
-        self.selected_action = "procedure"
-        self._close()
-
-    def _action_export(self):
-        self.selected_action = "export_db"
-        self._close()
-
-    def _action_import(self):
-        self.selected_action = "import_db"
-        self._close()
-
-    def _action_update(self):
-        self.selected_action = "check_updates"
-        self._close()
-
-    def _action_about(self):
-        self.selected_action = "about"
-        self._close()
-
-    def _cancel(self):
-        self.selected_proc = None
-        self.selected_action = "cancel"
-        self._close()
-
-    def _close(self):
-        """Корректное закрытие: снимаем grab, затем destroy."""
-        try:
-            self.grab_release()
-        except Exception:
-            pass
-        self.destroy()
+        ttk.Button(self, text="Выход", command=self.app.action_exit).pack(fill="x", pady=(8, 0))
 
 
 class PermitApp(tk.Tk):
-    """Главное окно приложения."""
+    """Главное окно приложения.
+
+    Архитектура: в одном Tk-окне последовательно показываются
+    MainMenuFrame (главное меню) и ProcedureFrame (одна из процедур).
+    Никаких Toplevel/grab_set/wait_window — это устраняет проблему
+    «закрытия приложения при нажатии кнопки».
+    """
 
     def __init__(self):
         super().__init__()
@@ -280,51 +241,89 @@ class PermitApp(tk.Tk):
         self.minsize(850, 700)
         self.configure(bg=BG_COLOR)
 
-        self._choose_procedure()
-        if not hasattr(self, 'procedure_code') or not self.procedure_code:
-            self.destroy()
-            return
+        self.current_frame: Optional[ttk.Frame] = None
+        self.show_menu()
 
-        self.procedure = get_procedure(self.procedure_code)
-        self.configure(bg=PROC_COLORS.get(self.procedure_code, BG_COLOR))
+    # ------------------------------------------------------------------
+    # Главное меню
+    # ------------------------------------------------------------------
+    def show_menu(self):
+        """Показать главное меню выбора процедуры."""
+        self._clear_content()
+        self.procedure_code = None
+        self.procedure = None
+        self.configure(bg=BG_COLOR)
+        self.title(APP_NAME)
+        self.current_frame = MainMenuFrame(self, self)
+        self.current_frame.pack(fill="both", expand=True)
+        self._center_window()
 
+    def _center_window(self):
+        """Центрирует главное окно на экране."""
+        self.update_idletasks()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+    # ------------------------------------------------------------------
+    # Действия меню
+    # ------------------------------------------------------------------
+    def open_procedure(self, code: str):
+        """Открыть форму выбранной процедуры."""
+        self.procedure_code = code
+        self.procedure = get_procedure(code)
+        self._clear_content()
+        self.configure(bg=PROC_COLORS.get(code, BG_COLOR))
+        self.title(f"{APP_NAME} — {self.procedure.name}")
+
+        # Инициализация переменных под текущую процедуру
         self._init_variables()
+
+        # Строим UI процедуры
         self._build_ui()
 
-    def _choose_procedure(self):
-        while True:
-            dlg = ProcedureSelectDialog(self)
-            self.wait_window(dlg)
+    def change_procedure(self):
+        """Кнопка 'Сменить процедуру' — возврат в меню."""
+        self.show_menu()
 
-            action = getattr(dlg, 'selected_action', None)
-            code = dlg.selected_proc
+    def action_exit(self):
+        """Кнопка 'Выход'."""
+        self.destroy()
 
-            if action == "cancel" or code is None:
-                self.procedure_code = None
-                return
+    def action_export_db(self):
+        try:
+            export_db_dialog(self, get_db_path(),
+                             f"permits_export_{datetime.now():%Y-%m-%d}.json")
+        except Exception as e:
+            messagebox.showerror("Выгрузка БД", f"Ошибка: {e}", parent=self)
 
-            if action == "export_db":
-                try:
-                    export_db_dialog(self, get_db_path(), f"permits_export_{datetime.now():%Y-%m-%d}.json")
-                except Exception as e:
-                    messagebox.showerror("Выгрузка БД", f"Ошибка: {e}")
+    def action_import_db(self):
+        self._import_db()
 
-            if action == "import_db":
-                self._import_db()
+    def action_check_updates(self):
+        try:
+            dlg_upd = UpdateDialog(self, APP_VERSION, APP_EXE_NAME)
+            self.wait_window(dlg_upd)
+        except Exception as e:
+            messagebox.showerror("Обновления", f"Ошибка: {e}", parent=self)
 
-            if action == "check_updates":
-                try:
-                    dlg_upd = UpdateDialog(self, APP_VERSION, APP_EXE_NAME)
-                    self.wait_window(dlg_upd)
-                except Exception as e:
-                    messagebox.showerror("Обновления", f"Ошибка: {e}")
+    def action_about(self):
+        self._show_about()
 
-            if action == "about":
-                self._show_about()
-
-            if action == "procedure" and code:
-                self.procedure_code = code
-                return
+    # ------------------------------------------------------------------
+    # Служебные
+    # ------------------------------------------------------------------
+    def _clear_content(self):
+        if self.current_frame is not None:
+            try:
+                self.current_frame.destroy()
+            except Exception:
+                pass
+            self.current_frame = None
 
     def _import_db(self):
         path = filedialog.askopenfilename(
@@ -674,12 +673,13 @@ class PermitApp(tk.Tk):
     def _build_buttons(self):
         btns = ttk.Frame(self)
         btns.pack(fill="x", padx=8, pady=(0, 8))
-        for i in range(4):
+        for i in range(5):
             btns.columnconfigure(i, weight=1)
         ttk.Button(btns, text="Сгенерировать документы", command=self.generate).grid(row=0, column=0, sticky="ew", padx=2)
         ttk.Button(btns, text="Очистить форму", command=self.clear_form).grid(row=0, column=1, sticky="ew", padx=2)
         ttk.Button(btns, text="Куда сохранять…", command=self.choose_output).grid(row=0, column=2, sticky="ew", padx=2)
         ttk.Button(btns, text="Открыть папку", command=self.open_output).grid(row=0, column=3, sticky="ew", padx=2)
+        ttk.Button(btns, text="⬅ Сменить процедуру", command=self.change_procedure).grid(row=0, column=4, sticky="ew", padx=2)
 
     def _collect_data(self) -> dict:
         data = {

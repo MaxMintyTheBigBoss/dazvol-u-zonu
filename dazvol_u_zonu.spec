@@ -59,7 +59,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='dazvol_u_zonu_ver.0.0.8',
+    name='dazvol_u_zonu_ver.0.0.9',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
