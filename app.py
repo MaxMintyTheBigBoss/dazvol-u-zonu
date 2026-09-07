@@ -242,6 +242,11 @@ class PermitApp(tk.Tk):
         self.configure(bg=BG_COLOR)
 
         self.current_frame: Optional[ttk.Frame] = None
+        
+        # Ensure window is shown
+        self.deiconify()
+        self.update_idletasks()
+        
         self.show_menu()
 
     # ------------------------------------------------------------------
@@ -464,9 +469,8 @@ class PermitApp(tk.Tk):
         self.status_bar.pack(fill="x", padx=8, pady=(0, 8))
 
     def _change_procedure(self):
-        """Кнопка 'Сменить процедуру' — возврат в меню."""
-        if messagebox.askyesno("Смена процедуры", "Текущие данные формы будут потеряны. Продолжить?", parent=self):
-            self.show_menu()
+        """Кнопка 'Сменить процедуру' — возврат в меню (из заголовка)."""
+        self.show_menu()
 
     def _build_tab_applicant(self, parent):
         pad = {"padx": 6, "pady": 4}
