@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.9"
+APP_VERSION = "0.0.10"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -283,8 +283,13 @@ class PermitApp(tk.Tk):
         # Инициализация переменных под текущую процедуру
         self._init_variables()
 
-        # Строим UI процедуры
-        self._build_ui()
+        # Создаём контейнер для UI процедуры
+        proc_frame = ttk.Frame(self)
+        proc_frame.pack(fill="both", expand=True)
+        self.current_frame = proc_frame
+
+        # Строим UI процедуры внутри proc_frame
+        self._build_ui(proc_frame)
 
     def change_procedure(self):
         """Кнопка 'Сменить процедуру' — возврат в меню."""
@@ -408,8 +413,8 @@ class PermitApp(tk.Tk):
             base = Path(__file__).parent.parent
         return str(base / "output")
 
-    def _build_ui(self):
-        style = ttk.Style(self)
+    def _build_ui(self, parent):
+        style = ttk.Style(parent)
         style.theme_use("clam")
         bg_proc = PROC_COLORS.get(self.procedure_code, BG_COLOR)
         style.configure("TFrame", background=bg_proc)
@@ -422,13 +427,13 @@ class PermitApp(tk.Tk):
         style.configure("TButton", font=("", 11, "bold"))
         style.map("TButton", background=[("active", BTN_ACTIVE), ("!active", BTN_BG)])
 
-        header = ttk.Frame(self)
+        header = ttk.Frame(parent)
         header.pack(fill="x", padx=10, pady=8)
         ttk.Label(header, text=self.procedure.name, font=("", 14, "bold"),
                   foreground=PROC_COLORS.get(self.procedure_code, "black")).pack(side="left", padx=10)
         ttk.Button(header, text="← Сменить процедуру", command=self._change_procedure).pack(side="right", padx=10)
 
-        self.nb = ttk.Notebook(self)
+        self.nb = ttk.Notebook(parent)
         self.nb.pack(fill="both", expand=True, padx=8, pady=4)
 
         tab1 = ttk.Frame(self.nb)
@@ -454,8 +459,8 @@ class PermitApp(tk.Tk):
             self.nb.add(tab5, text="5. Груз")
             self._build_tab_cargo(tab5)
 
-        self._build_buttons()
-        self.status_bar = ttk.Label(self, text="Готово", relief="sunken", anchor="w")
+        self._build_buttons(parent)
+        self.status_bar = ttk.Label(parent, text="Готово", relief="sunken", anchor="w")
         self.status_bar.pack(fill="x", padx=8, pady=(0, 8))
 
     def _change_procedure(self):
@@ -670,8 +675,8 @@ class PermitApp(tk.Tk):
         ttk.Label(parent, text="Вид и количество имущества:", font=("", 11, "bold")).grid(row=0, column=0, sticky="w", **pad)
         ttk.Entry(parent, textvariable=self.var_cargo, width=80).grid(row=0, column=1, columnspan=3, sticky="ew", padx=8, pady=4)
 
-    def _build_buttons(self):
-        btns = ttk.Frame(self)
+    def _build_buttons(self, parent):
+        btns = ttk.Frame(parent)
         btns.pack(fill="x", padx=8, pady=(0, 8))
         for i in range(5):
             btns.columnconfigure(i, weight=1)

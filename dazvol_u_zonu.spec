@@ -1,11 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_data_files
-
 block_cipher = None
-
-# Собираем данные локалей для корректной работы tkcalendar / babel
-babel_datas = collect_data_files('babel')
 
 a = Analysis(
     ['app.py'],
@@ -15,11 +10,9 @@ a = Analysis(
         ('templates', 'templates'),
         ('permit_update_gui.py', '.'),
         ('permitunified', 'permitunified'),
-    ] + babel_datas,
+        ('rthook_tcl.py', '.'),
+    ],
     hiddenimports=[
-        'docx',
-        'docx.oxml',
-        'docx.oxml.ns',
         'tkcalendar',
         'babel',
         'babel.numbers',
@@ -35,7 +28,6 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['rthook_tcl.py'],
-    # Исключаем pkg_resources и setuptools (защита от вылета jaraco.text)
     excludes=[
         'pkg_resources',
         'pkg_resources.py2_warn',
@@ -56,15 +48,13 @@ exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    a.zipfiles,
     a.datas,
     [],
-    name='dazvol_u_zonu_ver.0.0.9',
+    name='dazvol_u_zonu_ver.0.0.10',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
