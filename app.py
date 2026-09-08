@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.12"
+APP_VERSION = "0.0.11"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -456,7 +456,7 @@ class PermitApp(tk.Tk):
             self._build_tab_vehicles(tab3)
 
         tab4 = ttk.Frame(self.nb)
-        self.nb.add(tab4, text="4. Районы / Объекты")
+        self.nb.add(tab4, text="4. Районы / Объекты / Подписант")
         self._build_tab_districts(tab4)
 
         if self.procedure.has_cargo_permit:
@@ -477,34 +477,20 @@ class PermitApp(tk.Tk):
         r = 0
 
         if self.procedure_code == "19.17.1":
-            ttk.Label(parent, text="Организация (краткое наименование):").grid(row=r, column=0, sticky="w", **pad)
+            ttk.Label(parent, text="Организация (полное наименование):").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_org_info, width=60).grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
+            ttk.Label(parent, text="Организация (краткое):").grid(row=r, column=0, sticky="w", **pad)
+            ttk.Entry(parent, textvariable=self.var_org_short, width=60).grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
             
             ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Цель въезда:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
-            if self.procedure.goal_fixed:
-                self.var_goal.set(self.procedure.goal_fixed)
-                ttk.Label(parent, text=self.procedure.goal_fixed, foreground="gray").grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
-            elif self.procedure.goal_options:
-                ttk.Combobox(parent, textvariable=self.var_goal, values=self.procedure.goal_options, width=55).grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-            else:
-                ttk.Entry(parent, textvariable=self.var_goal, width=60).grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-
-            ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Срок действия:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
-            ttk.Label(parent, text="С:").grid(row=r, column=0, sticky="w", **pad)
-            DateEntryWithCalendar(parent, "", self.var_date_from).grid(row=r, column=1, sticky="ew", **pad)
-            ttk.Label(parent, text="По:").grid(row=r, column=2, sticky="w", **pad)
-            DateEntryWithCalendar(parent, "", self.var_date_to).grid(row=r, column=3, sticky="ew", **pad); r += 1
-
-            ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Кому на подписание:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
-            self.var_issued_by = tk.StringVar(value=self.procedure.signers[0] if self.procedure.signers else "")
-            ttk.Combobox(parent, textvariable=self.var_issued_by, values=self.procedure.signers, width=55, state="readonly").grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
-
-            parent.columnconfigure(1, weight=1)
-            parent.columnconfigure(3, weight=1)
-            return
+            ttk.Label(parent, text="Представитель организации:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
+            ttk.Label(parent, text="Фамилия:").grid(row=r, column=0, sticky="w", **pad)
+            ttk.Entry(parent, textvariable=self.var_org_rep_last, width=30).grid(row=r, column=1, sticky="ew", **pad)
+            ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
+            ttk.Entry(parent, textvariable=self.var_org_rep_first, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
+            ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
+            ttk.Entry(parent, textvariable=self.var_org_rep_middle, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
+        else:
             ttk.Label(parent, text="Фамилия:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_last_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
