@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -132,23 +132,8 @@ class DateEntryWithCalendar(ttk.Frame):
         ttk.Button(self, text="📅", width=3, command=self._open_calendar).pack(side="left", padx=2)
 
     def _on_type(self, event):
-        """Автоматическая маска ДД.ММ.ГГГГ."""
-        text = self.var.get()
-        digits = "".join(ch for ch in text if ch.isdigit())
-        if len(digits) > 8:
-            digits = digits[:8]
-        formatted = ""
-        if len(digits) >= 2:
-            formatted = digits[:2] + "."
-        if len(digits) >= 4:
-            formatted += digits[2:4] + "."
-        if len(digits) > 4:
-            formatted += digits[4:]
-        if formatted != text:
-            cursor_pos = self.entry.index(tk.INSERT)
-            self.var.set(formatted)
-            new_pos = min(cursor_pos, len(formatted))
-            self.entry.icursor(new_pos)
+        # Обычный ввод без автоформатирования (как в обычном документе)
+        pass
 
     def _open_calendar(self):
         if not _TKCALENDAR_OK:
@@ -193,7 +178,7 @@ class MainMenuFrame(ttk.Frame):
         self._build()
 
     def _build(self):
-        ttk.Label(self, text="Выбор процедуры", font=("", 16, "bold")).pack(pady=(0, 8))
+        ttk.Label(self, text="Выбор процедуры", font=("Roboto", 16, "bold")).pack(pady=(0, 8))
 
         # Кнопки процедур
         procedures = list_procedures()
@@ -207,7 +192,7 @@ class MainMenuFrame(ttk.Frame):
             btn = tk.Button(
                 proc_frame,
                 text=p.code,
-                font=("", 18, "bold"),
+                font=("Roboto", 18, "bold"),
                 bg=color,
                 fg=fg,
                 activebackground=color,
@@ -456,13 +441,13 @@ class PermitApp(tk.Tk):
             style.configure("TNotebook", background=bg_proc)
             style.configure("TNotebook.Tab", padding=(12, 6), font=("", 11, "bold"))
             style.map("TNotebook.Tab", background=[("selected", BTN_ACTIVE)], foreground=[("selected", "black")])
-            style.configure(".", font=("", 11))
-            style.configure("TButton", font=("", 11, "bold"))
+            style.configure(".", font=("Roboto", 13))
+            style.configure("TButton", font=("Roboto", 11, "bold"))
             style.map("TButton", background=[("active", BTN_ACTIVE), ("!active", BTN_BG)])
 
             header = ttk.Frame(parent)
             header.pack(fill="x", padx=10, pady=8)
-            ttk.Label(header, text=self.procedure.name, font=("", 14, "bold"),
+            ttk.Label(header, text=self.procedure.name, font=("Roboto", 14, "bold"),
                       foreground=PROC_COLORS.get(self.procedure_code, "black")).pack(side="left", padx=10)
             ttk.Button(header, text="← Сменить процедуру", command=self._change_procedure).pack(side="right", padx=10)
 

@@ -50,7 +50,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='dazvol_u_zonu_ver.0.1.1',
+    name='dazvol_u_zonu_ver.0.1.2',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
