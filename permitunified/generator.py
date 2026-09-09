@@ -223,6 +223,20 @@ def build_mapping_143(data: Dict) -> Dict:
         "Placeholder_13": data.get("car_number", ""),
         "Placeholder_20": data.get("issued_by", ""),
     }
+    # Пассажиры для заявления 14.3 (Placeholder_10.1, 10.2, 10.3, 11)
+    persons = data.get("persons", [])
+    if persons:
+        p0 = persons[0]
+        mapping["Placeholder_10.1"] = p0.get("last_name", "")
+        mapping["Placeholder_10.2"] = p0.get("first_name", "")
+        mapping["Placeholder_10.3"] = p0.get("middle_name", "")
+        mapping["Placeholder_11"] = p0.get("birth_date", "")
+    else:
+        mapping["Placeholder_10.1"] = ""
+        mapping["Placeholder_10.2"] = ""
+        mapping["Placeholder_10.3"] = ""
+        mapping["Placeholder_11"] = ""
+    # Авто для заявления (Placeholder_12, 13) — уже выше
     for i in range(3):
         mapping[f"Placeholder_4.{i+1}"] = districts[i] if i < len(districts) else ""
     return mapping

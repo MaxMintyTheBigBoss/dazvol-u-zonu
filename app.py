@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.16"
+APP_VERSION = "1.0.0"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -70,9 +70,9 @@ BTN_ACTIVE = "#B3C3B8"
 
 # Цвета для процедур
 PROC_COLORS = {
-    "14.3": "#009D92",    # бирюзовый
-    "14.5": "#FDD9B5",    # песочный
-    "19.17.1": "#E6EBE0", # серо-голубой
+    "14.3": BG_COLOR,
+    "14.5": BG_COLOR,
+    "19.17.1": BG_COLOR,
 }
 
 
@@ -473,12 +473,14 @@ class PermitApp(tk.Tk):
             self.nb.add(tab1, text="1. Заявитель / Организация")
             self._build_tab_applicant(tab1)
 
-            if self.procedure.has_individual_permits:
+            # Вкладка 2 скрыта для 14.5
+            if self.procedure.has_individual_permits and self.procedure_code != "14.5":
                 tab2 = ttk.Frame(self.nb)
                 self.nb.add(tab2, text="2. Лица / Пассажиры")
                 self._build_tab_persons(tab2)
 
-            if self.procedure.has_transport_permits:
+            # Вкладка 3 скрыта для 14.5
+            if self.procedure.has_transport_permits and self.procedure_code != "14.5":
                 tab3 = ttk.Frame(self.nb)
                 self.nb.add(tab3, text="3. Автомобили")
                 self._build_tab_vehicles(tab3)
@@ -669,14 +671,16 @@ class PermitApp(tk.Tk):
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
         ttk.Label(parent, text="Объекты:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
 
-        if self.procedure_code == "19.17.1":
-            ttk.Checkbutton(parent, text='ГПНИУ "ПГРЭЗ"', variable=self.var_include_pgrez).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
-            ttk.Label(parent, text="Произвольный объект:").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_custom_object, width=50).grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
-        else:
-            self.objects_clb = CheckListbox(parent, height=8)
-            self.objects_clb.grid(row=r, column=0, columnspan=4, sticky="ew", **pad)
-            self._refresh_objects()
+        # Для всех процедур: ПГРЭЗ + произвольный объект + справочник
+        ttk.Checkbutton(parent, text='ГПНИУ "ПГРЭЗ"', variable=self.var_include_pgrez).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
+        ttk.Label(parent, text="Произвольный объект:").grid(row=r, column=0, sticky="w", **pad)
+        ttk.Entry(parent, textvariable=self.var_custom_object, width=50).grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
+
+        r += 1
+        ttk.Label(parent, text="Справочник объектов (выберите по району):", font=("", 9)).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
+        self.objects_clb = CheckListbox(parent, height=6)
+        self.objects_clb.grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
+        self._refresh_objects()
 
         for var in self.district_vars.values():
             var.trace_add("write", lambda *a: self._refresh_objects())
