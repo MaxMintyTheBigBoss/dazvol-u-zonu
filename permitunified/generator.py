@@ -310,6 +310,12 @@ def make_application_143(data: Dict) -> Document:
     doc = Document(os.path.join(template_dir(), "Заявление_14.3.docx"))
     mapping = build_mapping_143(data)
     fill_doc(doc, mapping)
+    # Для 14.3: если несколько пассажиров — вставляем дополнительные строки в заявление
+    persons = data.get("persons", [])
+    if len(persons) > 1:
+        for p in persons[1:]:
+            text_line = f"{p.get('last_name', '')} {p.get('first_name', '')} {p.get('middle_name', '')}, дата рождения: {p.get('birth_date', '')}"
+            doc.add_paragraph(text_line)
     return doc
 
 
