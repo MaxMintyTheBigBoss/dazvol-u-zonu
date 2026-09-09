@@ -214,7 +214,7 @@ def build_mapping_143(data: Dict) -> Dict:
         "Placeholder_2": data.get("birth_date", ""),
         "Placeholder_3": data.get("id_number", ""),
         "Placeholder_4": join_districts(districts),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": data.get("goal", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -237,7 +237,7 @@ def build_mapping_145(data: Dict) -> Dict:
         "Placeholder_2": data.get("birth_date", ""),
         "Placeholder_3": data.get("id_number", ""),
         "Placeholder_4": join_districts(districts),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -260,7 +260,7 @@ def build_mapping_19171_individual(data: Dict, person: Dict) -> Dict:
         "Placeholder_22": data.get("org_info", ""),
         "Placeholder_25": person.get("position", ""),
         "Placeholder_4": join_districts(districts),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": data.get("goal", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -270,18 +270,15 @@ def build_mapping_19171_individual(data: Dict, person: Dict) -> Dict:
 
 def build_mapping_19171_transport(data: Dict, vehicle: Dict) -> Dict:
     districts = data.get("districts", [])
-    org_rep_last = data.get("org_rep_last", "")
-    org_rep_first = data.get("org_rep_first", "")
-    org_rep_middle = data.get("org_rep_middle", "")
-    if not org_rep_last and not org_rep_first and not org_rep_middle:
-        org_rep_last = data.get("org_info", "")
-
+    # Заинтересованное лицо — краткое наименование организации (var_org_info)
+    org_short = data.get("org_info", "")
+    
     return {
-        "Placeholder_1.1": org_rep_last,
-        "Placeholder_1.2": org_rep_first,
-        "Placeholder_1.3": org_rep_middle,
+        "Placeholder_1.1": org_short,
+        "Placeholder_1.2": "",
+        "Placeholder_1.3": "",
         "Placeholder_4": join_districts(districts),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": data.get("goal", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -310,7 +307,7 @@ def make_individual_143(data: Dict, person: Optional[Dict] = None) -> Document:
         "Placeholder_1.2": person.get("first_name", ""),
         "Placeholder_1.3": person.get("middle_name", ""),
         "Placeholder_4": join_districts(data.get("districts", [])),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": data.get("goal", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -327,7 +324,7 @@ def make_transport_143(data: Dict) -> Document:
         "Placeholder_1.2": data.get("first_name", ""),
         "Placeholder_1.3": data.get("middle_name", ""),
         "Placeholder_4": join_districts(data.get("districts", [])),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": data.get("goal", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -353,7 +350,7 @@ def make_permit_cargo(data: Dict) -> Document:
         "Placeholder_1.2": data.get("first_name", ""),
         "Placeholder_1.3": data.get("middle_name", ""),
         "Placeholder_4": join_districts(data.get("districts", [])),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
         "Placeholder_20": data.get("issued_by", ""),
@@ -370,7 +367,7 @@ def make_transport_145(data: Dict) -> Document:
         "Placeholder_1.2": data.get("first_name", ""),
         "Placeholder_1.3": data.get("middle_name", ""),
         "Placeholder_4": join_districts(data.get("districts", [])),
-        "Placeholder_5": data.get("objects", ""),
+        "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
         "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
@@ -401,7 +398,7 @@ def make_transport_19171(data: Dict, vehicle: Dict) -> Document:
 # ---------------------------------------------------------------------------
 
 def generate_all(data: Dict, output_dir: Optional[str] = None, procedure_code: str = "14.3") -> List[str]:
-    """Главный генератор пропусков."""
+    """Главный генератор пропусков. Имена файлов: (порядковый_номер)_(вид_пропуска)_(фамилия).docx"""
     if output_dir is None:
         output_dir = os.path.join(os.path.dirname(get_db_path()), "output")
 
@@ -411,22 +408,29 @@ def generate_all(data: Dict, output_dir: Optional[str] = None, procedure_code: s
 
     created = []
     proc = get_procedure(procedure_code)
-
-    if procedure_code == "19.17.1":
-        base_name = sanitize(data.get("org_short", "Организация"), "Организация")
-    else:
-        base_name = sanitize(data.get("last_name", "Заявитель"), "Заявитель")
+    
+    # Счётчик для порядковых номеров
+    doc_counter = 0
+    
+    def next_doc(permit_type: str, surname: str) -> str:
+        nonlocal doc_counter
+        doc_counter += 1
+        safe_surname = sanitize(surname, "БезФамилии")
+        safe_type = sanitize(permit_type, "Тип")
+        fname = f"({doc_counter})_{safe_type}_{safe_surname}.docx"
+        return fname
 
     # 1. Заявления
     if proc.has_application:
-        doc = None
         if procedure_code == "14.3":
             doc = make_application_143(data)
-            fname = f"Заявление_{base_name}.docx"
+            fname = next_doc("Заявление", data.get("last_name", "Заявитель"))
         elif procedure_code == "14.5":
             doc = make_application_145(data)
-            fname = f"Заявление_14.5_{base_name}.docx"
-
+            fname = next_doc("Заявление", data.get("last_name", "Заявитель"))
+        else:
+            doc = None
+        
         if doc:
             p = os.path.join(out, fname)
             doc.save(p)
@@ -437,28 +441,32 @@ def generate_all(data: Dict, output_dir: Optional[str] = None, procedure_code: s
         if procedure_code == "19.17.1":
             for i, person in enumerate(data.get("persons", [])):
                 doc = make_individual_19171(data, person)
-                lname = sanitize(person.get("last_name", f"Лицо{i+1}"))
-                p = os.path.join(out, f"Пропуск_Индивидуальный_{lname}.docx")
+                lname = person.get("last_name", f"Лицо{i+1}")
+                fname = next_doc("Индивидуальный", lname)
+                p = os.path.join(out, fname)
                 doc.save(p)
                 created.append(p)
         else:
             # Заявитель
             doc = make_individual_143(data)
-            p = os.path.join(out, f"Пропуск_Заявитель_{base_name}.docx")
+            fname = next_doc("Индивидуальный", data.get("last_name", "Заявитель"))
+            p = os.path.join(out, fname)
             doc.save(p)
             created.append(p)
             # Пассажиры
             for person in data.get("persons", []):
-                plname = sanitize(person.get("last_name", "Пассажир"))
+                plname = person.get("last_name", "Пассажир")
                 doc = make_individual_143(data, person)
-                p = os.path.join(out, f"Пропуск_Пассажир_{plname}.docx")
+                fname = next_doc("Пассажир", plname)
+                p = os.path.join(out, fname)
                 doc.save(p)
                 created.append(p)
 
     # 3. Грузовой пропуск (только 14.5)
     if proc.has_cargo_permit:
         doc = make_permit_cargo(data)
-        p = os.path.join(out, f"Пропуск_ВывозИмущества_{base_name}.docx")
+        fname = next_doc("ВывозИмущества", data.get("last_name", "Заявитель"))
+        p = os.path.join(out, fname)
         doc.save(p)
         created.append(p)
 
@@ -467,15 +475,17 @@ def generate_all(data: Dict, output_dir: Optional[str] = None, procedure_code: s
         if procedure_code == "19.17.1":
             for i, vehicle in enumerate(data.get("vehicles", [])):
                 doc = make_transport_19171(data, vehicle)
-                car = sanitize(vehicle.get("number", "") or f"Авто{i+1}")
-                p = os.path.join(out, f"Пропуск_Транспорт_{car}.docx")
+                # Фамилия — краткое название организации
+                org_short = data.get("org_info", f"Организация{i+1}")
+                fname = next_doc("Транспорт", org_short)
+                p = os.path.join(out, fname)
                 doc.save(p)
                 created.append(p)
         else:
             if data.get("car_make", "").strip() or data.get("car_number", "").strip():
                 doc = make_transport_143(data) if procedure_code == "14.3" else make_transport_145(data)
-                car = sanitize(data.get("car_number", "") or "Авто")
-                p = os.path.join(out, f"Пропуск_Транспорт_{car}.docx")
+                fname = next_doc("Транспорт", data.get("last_name", "Авто"))
+                p = os.path.join(out, fname)
                 doc.save(p)
                 created.append(p)
 
