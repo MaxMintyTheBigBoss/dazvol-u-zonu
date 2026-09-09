@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.11"
+APP_VERSION = "0.0.13"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -419,54 +419,54 @@ class PermitApp(tk.Tk):
         return str(base / "output")
 
     def _build_ui(self, parent):
-        style = ttk.Style(parent)
-        style.theme_use("clam")
-        bg_proc = PROC_COLORS.get(self.procedure_code, BG_COLOR)
-        style.configure("TFrame", background=bg_proc)
-        style.configure("TLabel", background=bg_proc)
-        style.configure("TCheckbutton", background=bg_proc)
-        style.configure("TNotebook", background=bg_proc)
-        style.configure("TNotebook.Tab", padding=(12, 6), font=("", 11, "bold"))
-        style.map("TNotebook.Tab", background=[("selected", BTN_ACTIVE)], foreground=[("selected", "black")])
-        style.configure(".", font=("", 11))
-        style.configure("TButton", font=("", 11, "bold"))
-        style.map("TButton", background=[("active", BTN_ACTIVE), ("!active", BTN_BG)])
+            style = ttk.Style(parent)
+            style.theme_use("clam")
+            bg_proc = PROC_COLORS.get(self.procedure_code, BG_COLOR)
+            style.configure("TFrame", background=bg_proc)
+            style.configure("TLabel", background=bg_proc)
+            style.configure("TCheckbutton", background=bg_proc)
+            style.configure("TNotebook", background=bg_proc)
+            style.configure("TNotebook.Tab", padding=(12, 6), font=("", 11, "bold"))
+            style.map("TNotebook.Tab", background=[("selected", BTN_ACTIVE)], foreground=[("selected", "black")])
+            style.configure(".", font=("", 11))
+            style.configure("TButton", font=("", 11, "bold"))
+            style.map("TButton", background=[("active", BTN_ACTIVE), ("!active", BTN_BG)])
 
-        header = ttk.Frame(parent)
-        header.pack(fill="x", padx=10, pady=8)
-        ttk.Label(header, text=self.procedure.name, font=("", 14, "bold"),
-                  foreground=PROC_COLORS.get(self.procedure_code, "black")).pack(side="left", padx=10)
-        ttk.Button(header, text="← Сменить процедуру", command=self._change_procedure).pack(side="right", padx=10)
+            header = ttk.Frame(parent)
+            header.pack(fill="x", padx=10, pady=8)
+            ttk.Label(header, text=self.procedure.name, font=("", 14, "bold"),
+                      foreground=PROC_COLORS.get(self.procedure_code, "black")).pack(side="left", padx=10)
+            ttk.Button(header, text="← Сменить процедуру", command=self._change_procedure).pack(side="right", padx=10)
 
-        self.nb = ttk.Notebook(parent)
-        self.nb.pack(fill="both", expand=True, padx=8, pady=4)
+            self.nb = ttk.Notebook(parent)
+            self.nb.pack(fill="both", expand=True, padx=8, pady=4)
 
-        tab1 = ttk.Frame(self.nb)
-        self.nb.add(tab1, text="1. Заявитель / Организация")
-        self._build_tab_applicant(tab1)
+            tab1 = ttk.Frame(self.nb)
+            self.nb.add(tab1, text="1. Заявитель / Организация")
+            self._build_tab_applicant(tab1)
 
-        if self.procedure.has_individual_permits:
-            tab2 = ttk.Frame(self.nb)
-            self.nb.add(tab2, text="2. Лица / Пассажиры")
-            self._build_tab_persons(tab2)
+            if self.procedure.has_individual_permits:
+                tab2 = ttk.Frame(self.nb)
+                self.nb.add(tab2, text="2. Лица / Пассажиры")
+                self._build_tab_persons(tab2)
 
-        if self.procedure.has_transport_permits:
-            tab3 = ttk.Frame(self.nb)
-            self.nb.add(tab3, text="3. Автомобили")
-            self._build_tab_vehicles(tab3)
+            if self.procedure.has_transport_permits:
+                tab3 = ttk.Frame(self.nb)
+                self.nb.add(tab3, text="3. Автомобили")
+                self._build_tab_vehicles(tab3)
 
-        tab4 = ttk.Frame(self.nb)
-        self.nb.add(tab4, text="4. Районы / Объекты / Подписант")
-        self._build_tab_districts(tab4)
+            tab4 = ttk.Frame(self.nb)
+            self.nb.add(tab4, text="4. Районы / Объекты")
+            self._build_tab_districts(tab4)
 
-        if self.procedure.has_cargo_permit:
-            tab5 = ttk.Frame(self.nb)
-            self.nb.add(tab5, text="5. Груз")
-            self._build_tab_cargo(tab5)
+            if self.procedure.has_cargo_permit:
+                tab5 = ttk.Frame(self.nb)
+                self.nb.add(tab5, text="5. Груз")
+                self._build_tab_cargo(tab5)
 
-        self._build_buttons(parent)
-        self.status_bar = ttk.Label(parent, text="Готово", relief="sunken", anchor="w")
-        self.status_bar.pack(fill="x", padx=8, pady=(0, 8))
+            self._build_buttons(parent)
+            self.status_bar = ttk.Label(parent, text="Готово", relief="sunken", anchor="w")
+            self.status_bar.pack(fill="x", padx=8, pady=(0, 8))
 
     def _change_procedure(self):
         """Кнопка 'Сменить процедуру' — возврат в меню (из заголовка)."""
@@ -477,19 +477,19 @@ class PermitApp(tk.Tk):
         r = 0
 
         if self.procedure_code == "19.17.1":
-            ttk.Label(parent, text="Организация (полное наименование):").grid(row=r, column=0, sticky="w", **pad)
+            # Организация (краткое наименование) — одна строка
+            ttk.Label(parent, text="Организация (краткое наименование):").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_org_info, width=60).grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Организация (краткое):").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_org_short, width=60).grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
-            
-            ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Представитель организации:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
-            ttk.Label(parent, text="Фамилия:").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_org_rep_last, width=30).grid(row=r, column=1, sticky="ew", **pad)
-            ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_org_rep_first, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
-            ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_org_rep_middle, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
+            # Удалено: "Организация (краткое)"
+            # Закомментировано: Представитель организации, Фамилия, Имя, Отчество
+            # ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
+            # ttk.Label(parent, text="Представитель организации:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
+            # ttk.Label(parent, text="Фамилия:").grid(row=r, column=0, sticky="w", **pad)
+            # ttk.Entry(parent, textvariable=self.var_org_rep_last, width=30).grid(row=r, column=1, sticky="ew", **pad)
+            # ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
+            # ttk.Entry(parent, textvariable=self.var_org_rep_first, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
+            # ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
+            # ttk.Entry(parent, textvariable=self.var_org_rep_middle, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
         else:
             ttk.Label(parent, text="Фамилия:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_last_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
