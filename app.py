@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -132,8 +132,30 @@ class DateEntryWithCalendar(ttk.Frame):
         ttk.Button(self, text="📅", width=3, command=self._open_calendar).pack(side="left", padx=2)
 
     def _on_type(self, event):
-        # Обычный ввод без автоформатирования (как в обычном документе)
-        pass
+        """Маска даты: точки ставятся автоматически после 2-го и 4-го знака, курсор сдвигается вперёд."""
+        text = self.var.get()
+        # Убираем всё кроме цифр
+        digits = "".join(ch for ch in text if ch.isdigit())
+        if len(digits) > 8:
+            digits = digits[:8]
+        # Формируем с точками
+        formatted = ""
+        if len(digits) >= 2:
+            formatted = digits[:2] + "."
+        if len(digits) >= 4:
+            formatted += digits[2:4] + "."
+        if len(digits) > 4:
+            formatted += digits[4:]
+        # Устанавливаем значение
+        if formatted != text:
+            self.var.set(formatted)
+            # Курсор сдвигается за введённую цифру (вперёд)
+            cursor_pos = self.entry.index(tk.INSERT)
+            new_pos = min(cursor_pos + 1, len(formatted))
+            # Если после цифры идёт точка, сдвигаем ещё на 1 (за точку)
+            if len(formatted) > new_pos and formatted[new_pos] == ".":
+                new_pos += 1
+            self.entry.icursor(new_pos)
 
     def _open_calendar(self):
         if not _TKCALENDAR_OK:
