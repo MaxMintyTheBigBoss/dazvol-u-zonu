@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.0.15"
+APP_VERSION = "0.0.16"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -158,6 +158,18 @@ class DateEntryWithCalendar(ttk.Frame):
         top.title("Выбор даты")
         top.transient(self)
         top.grab_set()
+        # Центрируем календарь относительно родителя или главного окна
+        top.update_idletasks()
+        parent_app = self.master
+        while parent_app and not isinstance(parent_app, tk.Tk):
+            parent_app = parent_app.master
+        if parent_app and isinstance(parent_app, tk.Tk):
+            x = parent_app.winfo_rootx() + max(0, (parent_app.winfo_width() - top.winfo_reqwidth()) // 2)
+            y = parent_app.winfo_rooty() + max(0, (parent_app.winfo_height() - top.winfo_reqheight()) // 2)
+            sw, sh = parent_app.winfo_screenwidth(), parent_app.winfo_screenheight()
+            x = max(10, min(x, sw - top.winfo_reqwidth() - 10))
+            y = max(10, min(y, sh - top.winfo_reqheight() - 10))
+            top.geometry(f"+{x}+{y}")
         cal = _TkCalendar(top, date_pattern="dd.mm.yyyy", firstweekday="monday")
         cal.pack(padx=10, pady=10)
 
@@ -273,6 +285,22 @@ class PermitApp(tk.Tk):
         x = max(0, (sw - w) // 2)
         y = max(0, (sh - h) // 2)
         self.geometry(f"{w}x{h}+{x}+{y}")
+    def _center_dialog_on_main_window(self, dialog):
+        """Центрирует диалог (Toplevel) относительно главного окна или по центру экрана."""
+        dialog.update_idletasks()
+        dlg_w = dialog.winfo_reqwidth()
+        dlg_h = dialog.winfo_reqheight()
+        main_w = self.winfo_width() or 900
+        main_h = self.winfo_height() or 750
+        x = self.winfo_rootx() + (main_w - dlg_w) // 2
+        y = self.winfo_rooty() + (main_h - dlg_h) // 2
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = max(10, min(x, sw - dlg_w - 10))
+        y = max(10, min(y, sh - dlg_h - 10))
+        dialog.geometry(f"+{x}+{y}")
+
+
 
     # ------------------------------------------------------------------
     # Действия меню
@@ -786,6 +814,19 @@ class PersonDialog143(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
+        # Центрируем диалог на главном окне или экране
+        self.update_idletasks()
+        parent_app = parent
+        while parent_app and not isinstance(parent_app, tk.Tk):
+            parent_app = parent_app.master
+        if parent_app and isinstance(parent_app, tk.Tk):
+            x = parent_app.winfo_rootx() + max(0, (parent_app.winfo_width() - self.winfo_reqwidth()) // 2)
+            y = parent_app.winfo_rooty() + max(0, (parent_app.winfo_height() - self.winfo_reqheight()) // 2)
+            screen_w = parent_app.winfo_screenwidth()
+            screen_h = parent_app.winfo_screenheight()
+            x = max(10, min(x, screen_w - self.winfo_reqwidth() - 10))
+            y = max(10, min(y, screen_h - self.winfo_reqheight() - 10))
+            self.geometry(f"+{x}+{y}")
         self.result = None
 
         self.var_last = tk.StringVar(value=person.get("last_name", "") if person else "")
@@ -830,6 +871,19 @@ class PersonDialog19171(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
+        # Центрируем диалог на главном окне или экране
+        self.update_idletasks()
+        parent_app = parent
+        while parent_app and not isinstance(parent_app, tk.Tk):
+            parent_app = parent_app.master
+        if parent_app and isinstance(parent_app, tk.Tk):
+            x = parent_app.winfo_rootx() + max(0, (parent_app.winfo_width() - self.winfo_reqwidth()) // 2)
+            y = parent_app.winfo_rooty() + max(0, (parent_app.winfo_height() - self.winfo_reqheight()) // 2)
+            screen_w = parent_app.winfo_screenwidth()
+            screen_h = parent_app.winfo_screenheight()
+            x = max(10, min(x, screen_w - self.winfo_reqwidth() - 10))
+            y = max(10, min(y, screen_h - self.winfo_reqheight() - 10))
+            self.geometry(f"+{x}+{y}")
         self.result = None
 
         self.var_last = tk.StringVar(value=person.get("last_name", "") if person else "")
@@ -874,6 +928,19 @@ class VehicleDialog(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
+        # Центрируем диалог на главном окне или экране
+        self.update_idletasks()
+        parent_app = parent
+        while parent_app and not isinstance(parent_app, tk.Tk):
+            parent_app = parent_app.master
+        if parent_app and isinstance(parent_app, tk.Tk):
+            x = parent_app.winfo_rootx() + max(0, (parent_app.winfo_width() - self.winfo_reqwidth()) // 2)
+            y = parent_app.winfo_rooty() + max(0, (parent_app.winfo_height() - self.winfo_reqheight()) // 2)
+            screen_w = parent_app.winfo_screenwidth()
+            screen_h = parent_app.winfo_screenheight()
+            x = max(10, min(x, screen_w - self.winfo_reqwidth() - 10))
+            y = max(10, min(y, screen_h - self.winfo_reqheight() - 10))
+            self.geometry(f"+{x}+{y}")
         self.result = None
 
         self.var_make = tk.StringVar(value=vehicle.get("make", "") if vehicle else "")
