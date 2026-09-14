@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.5"
+APP_VERSION = "0.1.12"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -131,31 +131,56 @@ class DateEntryWithCalendar(ttk.Frame):
         self.entry.bind("<KeyRelease>", self._on_type)
         ttk.Button(self, text="📅", width=3, command=self._open_calendar).pack(side="left", padx=2)
 
+    _DATE_LIMITS = (2, 2, 4)  # день, месяц, год
+
+    @classmethod
+    def _format_date(cls, text: str):
+        """Приводит ввод к виду ДД.ММ.ГГГГ.
+
+        Возвращает (строка, позиция_курсора). Разбор идёт ПО СЕКЦИЯМ, разделённым
+        точками: цифры из разных секций не склеиваются. Именно поэтому ввод
+        "01" + "0" даёт "01.0" (ноль попадает в месяц), а не "01." с потерей цифры.
+        """
+        # Слитный ввод без точек (вставка из буфера, быстрый набор): DDMMYYYY
+        if "." not in text:
+            d = "".join(ch for ch in text if ch.isdigit())[:8]
+            if len(d) > 2:
+                s = d[:2] + "."
+                if len(d) > 4:
+                    s += d[2:4] + "." + d[4:]
+                else:
+                    s += d[2:]
+                return s, len(s)
+        parts = text.split(".")
+        segs = []
+        for i, lim in enumerate(cls._DATE_LIMITS):
+            seg = "".join(c for c in (parts[i] if i < len(parts) else "") if c.isdigit())
+            segs.append(seg[:lim])
+        out = ""
+        for i, seg in enumerate(segs):
+            out += seg
+            if i < 2:
+                next_started = len(segs[i + 1]) > 0
+                if len(seg) == cls._DATE_LIMITS[i] or next_started:
+                    out += "."
+        return out, len(out)
+
     def _on_type(self, event):
-        """Маска даты: точки ставятся автоматически после 2-го и 4-го знака, курсор сдвигается вперёд."""
-        text = self.var.get()
-        # Убираем всё кроме цифр
-        digits = "".join(ch for ch in text if ch.isdigit())
-        if len(digits) > 8:
-            digits = digits[:8]
-        # Формируем с точками
-        formatted = ""
-        if len(digits) >= 2:
-            formatted = digits[:2] + "."
-        if len(digits) >= 4:
-            formatted += digits[2:4] + "."
-        if len(digits) > 4:
-            formatted += digits[4:]
-        # Устанавливаем значение
-        if formatted != text:
+        """Маска даты ДД.ММ.ГГГГ: точки ставятся автоматически, курсор — в конец.
+
+        Вызывается на <KeyRelease>, когда Tk уже вставил символ. Курсор всегда
+        переносится в конец строки, поэтому следующая цифра попадает в нужную
+        секцию, а не в середину (прежний баг: курсор оставался в центре).
+        """
+        if event.keysym in (
+            "Left", "Right", "Home", "End", "Up", "Down", "Tab",
+            "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
+        ):
+            return
+        formatted, pos = self._format_date(self.var.get())
+        if formatted != self.var.get():
             self.var.set(formatted)
-            # Курсор сдвигается за введённую цифру (вперёд)
-            cursor_pos = self.entry.index(tk.INSERT)
-            new_pos = min(cursor_pos + 1, len(formatted))
-            # Если после цифры идёт точка, сдвигаем ещё на 1 (за точку)
-            if len(formatted) > new_pos and formatted[new_pos] == ".":
-                new_pos += 1
-            self.entry.icursor(new_pos)
+        self.entry.icursor(pos)
 
     def _open_calendar(self):
         if not _TKCALENDAR_OK:
