@@ -219,8 +219,8 @@ def build_mapping_143(data: Dict) -> Dict:
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
         "Placeholder_9": data.get("app_date") or today_dmy(),
-        "Placeholder_12": data.get("car_make", ""),
-        "Placeholder_13": data.get("car_number", ""),
+        "Placeholder_12": (data.get("vehicles") or [{}])[0].get("make", "") or data.get("car_make", ""),
+        "Placeholder_13": (data.get("vehicles") or [{}])[0].get("number", "") or data.get("car_number", ""),
         "Placeholder_20": data.get("issued_by", ""),
     }
     # Пассажиры для заявления 14.3 (Placeholder_10.1, 10.2, 10.3, 11)
@@ -255,8 +255,8 @@ def build_mapping_145(data: Dict) -> Dict:
         "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
-        "Placeholder_12": data.get("car_make", ""),
-        "Placeholder_13": data.get("car_number", ""),
+        "Placeholder_12": (data.get("vehicles") or [{}])[0].get("make", "") or data.get("car_make", ""),
+        "Placeholder_13": (data.get("vehicles") or [{}])[0].get("number", "") or data.get("car_number", ""),
         "Placeholder_20": data.get("issued_by", ""),
         "Placeholder_21": data.get("cargo", ""),
     }
@@ -306,16 +306,78 @@ def build_mapping_19171_transport(data: Dict, vehicle: Dict) -> Dict:
 # Генераторы отдельных документов
 # ---------------------------------------------------------------------------
 
+def _insert_paragraph_after(paragraph, text: str, style_from=None):
+    """Вставляет абзац сразу после указанного, копируя форматирование абзаца-образца."""
+    from copy import deepcopy
+    from docx.text.paragraph import Paragraph
+
+    new_p = OxmlElement("w:p")
+    if style_from is not None:
+        # Копируем свойства абзаца (шрифт, отступы, интервал)
+        ppr = style_from._p.find(qn("w:pPr"))
+        if ppr is not None:
+            new_p.append(deepcopy(ppr))
+        # Берём rPr первого run'а образца, чтобы сохранить шрифт
+        rpr_tpl = None
+        for r in style_from._p.findall(qn("w:r")):
+            rpr_tpl = r.find(qn("w:rPr"))
+            if rpr_tpl is not None:
+                break
+    else:
+        rpr_tpl = None
+
+    run_el = OxmlElement("w:r")
+    if rpr_tpl is not None:
+        run_el.append(deepcopy(rpr_tpl))
+    t = OxmlElement("w:t")
+    t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    t.text = text
+    run_el.append(t)
+    new_p.append(run_el)
+
+    paragraph._p.addnext(new_p)
+    return Paragraph(new_p, paragraph._parent)
+
+
+def _person_line(p: Dict) -> str:
+    """Строка сопровождающего в заявлении: «Фамилия Имя Отчество, ДД.ММ.ГГГГ»."""
+    fio = " ".join(x for x in [p.get("last_name", ""), p.get("first_name", ""), p.get("middle_name", "")] if x)
+    bd = p.get("birth_date", "")
+    return f"{fio}, {bd}" if bd else fio
+
+
+def _vehicle_line(v: Dict) -> str:
+    """Строка автомобиля в заявлении: «марка, регистрационный знак»."""
+    return f"{v.get('make', '')}, {v.get('number', '')}"
+
+
 def make_application_143(data: Dict) -> Document:
     doc = Document(os.path.join(template_dir(), "Заявление_14.3.docx"))
+
+    # Абзацы-образцы запоминаем ДО замены плейсхолдеров
+    p_person_tpl = None
+    p_vehicle_tpl = None
+    for p in doc.paragraphs:
+        if p_person_tpl is None and "Placeholder_10.1" in p.text:
+            p_person_tpl = p
+        if p_vehicle_tpl is None and "Placeholder_12" in p.text:
+            p_vehicle_tpl = p
+
     mapping = build_mapping_143(data)
     fill_doc(doc, mapping)
-    # Для 14.3: если несколько пассажиров — вставляем дополнительные строки в заявление
-    persons = data.get("persons", [])
-    if len(persons) > 1:
-        for p in persons[1:]:
-            text_line = f"{p.get('last_name', '')} {p.get('first_name', '')} {p.get('middle_name', '')}, дата рождения: {p.get('birth_date', '')}"
-            doc.add_paragraph(text_line)
+
+    # Дополнительные сопровождающие — сразу после строки первого, а не в конце заявления
+    if p_person_tpl is not None:
+        anchor = p_person_tpl
+        for person in data.get("persons", [])[1:]:
+            anchor = _insert_paragraph_after(anchor, _person_line(person), p_person_tpl)
+
+    # Дополнительный транспорт — сразу после строки первого автомобиля
+    if p_vehicle_tpl is not None:
+        anchor = p_vehicle_tpl
+        for vehicle in data.get("vehicles", [])[1:]:
+            anchor = _insert_paragraph_after(anchor, _vehicle_line(vehicle), p_vehicle_tpl)
+
     return doc
 
 
@@ -337,7 +399,8 @@ def make_individual_143(data: Dict, person: Optional[Dict] = None) -> Document:
     return doc
 
 
-def make_transport_143(data: Dict) -> Document:
+def make_transport_143(data: Dict, vehicle: Optional[Dict] = None) -> Document:
+    vehicle = vehicle or {}
     doc = Document(os.path.join(template_dir(), "Пропуск_транспортный.docx"))
     mapping = {
         "Placeholder_1.1": data.get("last_name", ""),
@@ -348,8 +411,8 @@ def make_transport_143(data: Dict) -> Document:
         "Placeholder_6": data.get("goal", ""),
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
-        "Placeholder_12": data.get("car_make", ""),
-        "Placeholder_13": data.get("car_number", ""),
+        "Placeholder_12": vehicle.get("make", "") or data.get("car_make", ""),
+        "Placeholder_13": vehicle.get("number", "") or data.get("car_number", ""),
         "Placeholder_20": data.get("issued_by", ""),
     }
     fill_doc(doc, mapping)
@@ -380,7 +443,8 @@ def make_permit_cargo(data: Dict) -> Document:
     return doc
 
 
-def make_transport_145(data: Dict) -> Document:
+def make_transport_145(data: Dict, vehicle: Optional[Dict] = None) -> Document:
+    vehicle = vehicle or {}
     doc = Document(os.path.join(template_dir(), "Пропуск_транспортный.docx"))
     mapping = {
         "Placeholder_1.1": data.get("last_name", ""),
@@ -391,8 +455,8 @@ def make_transport_145(data: Dict) -> Document:
         "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
-        "Placeholder_12": data.get("car_make", ""),
-        "Placeholder_13": data.get("car_number", ""),
+        "Placeholder_12": vehicle.get("make", "") or data.get("car_make", ""),
+        "Placeholder_13": vehicle.get("number", "") or data.get("car_number", ""),
         "Placeholder_20": data.get("issued_by", ""),
     }
     fill_doc(doc, mapping)
@@ -502,7 +566,19 @@ def generate_all(data: Dict, output_dir: Optional[str] = None, procedure_code: s
                 doc.save(p)
                 created.append(p)
         else:
-            if data.get("car_make", "").strip() or data.get("car_number", "").strip():
+            vehicles = data.get("vehicles", [])
+            if vehicles:
+                # По одному транспортному пропуску на каждое ТС
+                for vehicle in vehicles:
+                    if procedure_code == "14.3":
+                        doc = make_transport_143(data, vehicle)
+                    else:
+                        doc = make_transport_145(data, vehicle)
+                    fname = next_doc("Транспорт", data.get("last_name", "Авто"))
+                    p = os.path.join(out, fname)
+                    doc.save(p)
+                    created.append(p)
+            elif data.get("car_make", "").strip() or data.get("car_number", "").strip():
                 doc = make_transport_143(data) if procedure_code == "14.3" else make_transport_145(data)
                 fname = next_doc("Транспорт", data.get("last_name", "Авто"))
                 p = os.path.join(out, fname)

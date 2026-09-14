@@ -62,7 +62,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.12"
+APP_VERSION = "0.1.13"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -560,7 +560,7 @@ class PermitApp(tk.Tk):
             ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_middle_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Дата рождения:").grid(row=r, column=2, sticky="w", **pad)
-            DateEntryWithCalendar(parent, "", self.var_birth_date).grid(row=r, column=3, sticky="ew", **pad); r += 1
+            ttk.Entry(parent, textvariable=self.var_birth_date, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
             ttk.Label(parent, text="Личный номер:").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_id_number, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
 
@@ -878,7 +878,7 @@ class PersonDialog143(tk.Toplevel):
         ttk.Label(self, text="Отчество:").grid(row=2, column=0, sticky="w", **pad)
         ttk.Entry(self, textvariable=self.var_middle, width=30).grid(row=2, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Дата рождения:").grid(row=3, column=0, sticky="w", **pad)
-        DateEntryWithCalendar(self, "", self.var_birth).grid(row=3, column=1, sticky="ew", **pad)
+        ttk.Entry(self, textvariable=self.var_birth, width=30).grid(row=3, column=1, sticky="ew", **pad)
 
         btns = ttk.Frame(self)
         btns.grid(row=4, column=0, columnspan=2, pady=12)
