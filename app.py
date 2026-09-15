@@ -3,6 +3,7 @@
 Единое приложение «Генератор пропусков» — выбор процедуры + генерация.
 Объединяет 14.3, 14.5, 19.17.1 в одно окно с выбором процедуры при запуске.
 """
+import json
 import os
 import re
 import sys
@@ -63,8 +64,34 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.14"
+APP_VERSION = "0.1.15"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
+
+
+def _app_dir():
+    """Папка, где лежит exe (или исходники при запуске из Python)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+def installed_version():
+    """Установленная версия: из version.json рядом с exe, иначе APP_VERSION.
+
+    version.json пишется установщиком обновлений. Если файла нет
+    (первый запуск, ручная распаковка) — берём версию из кода.
+    """
+    try:
+        marker = _app_dir() / "version.json"
+        if marker.exists():
+            with open(marker, encoding="utf-8") as f:
+                data = json.load(f)
+            v = (data or {}).get("version")
+            if v:
+                return str(v)
+    except Exception:
+        pass
+    return APP_VERSION
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
 BTN_ACTIVE = "#B3C3B8"
@@ -461,7 +488,7 @@ class PermitApp(tk.Tk):
 
     def action_check_updates(self):
         try:
-            dlg_upd = UpdateDialog(self, APP_VERSION, APP_EXE_NAME)
+            dlg_upd = UpdateDialog(self, installed_version(), APP_EXE_NAME)
             self.wait_window(dlg_upd)
         except Exception as e:
             messagebox.showerror("Обновления", f"Ошибка: {e}", parent=self)
@@ -510,7 +537,7 @@ class PermitApp(tk.Tk):
     def _show_about(self):
         about = (
             f"{APP_NAME}\n"
-            f"Версия {APP_VERSION}\n"
+            f"Версия {installed_version()}\n"
             f"Файл: {APP_EXE_NAME}\n\n"
             f"Единый генератор пропусков по процедурам:\n"
             f"  • 14.3 — Пребывание на территории зоны\n"

@@ -103,6 +103,13 @@ class LocalUpdater:
             self.workdir = os.path.dirname(os.path.abspath(__file__))
 
         self.exe_name = exe_name
+        # Имя запущенного процесса: обновление встанет именно под ним,
+        # чтобы перезапуск запустил новую версию, а не старый файл.
+        self.current_exe = (
+            os.path.basename(sys.executable)
+            if getattr(sys, "frozen", False)
+            else exe_name
+        )
         self.backup_dir = os.path.join(self.workdir, "_backup")
         os.makedirs(self.backup_dir, exist_ok=True)
 
@@ -117,7 +124,7 @@ class LocalUpdater:
         if not zipfile.is_zipfile(zip_path):
             return False, "Файл не является zip-архивом."
 
-        exe_path = os.path.join(self.workdir, self.exe_name)
+        exe_path = os.path.join(self.workdir, self.current_exe)
         backup_filename = self._make_backup_name()
         backup_path = os.path.join(self.backup_dir, backup_filename)
         
@@ -125,12 +132,17 @@ class LocalUpdater:
         exe_renamed = exe_path + ".old"
 
         # 1. Проверка безопасных путей внутри архива (Защита от Zip-Slip)
+        incoming = None
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 for member in zf.namelist():
                     target_path = os.path.abspath(os.path.join(self.workdir, member))
                     if os.path.commonpath([self.workdir, target_path]) != self.workdir:
                         return False, f"Подозрительный путь в архиве: {member}"
+                    # Запоминаем exe из архива (для смены имени версии)
+                    base = os.path.basename(member)
+                    if base.lower().startswith("dazvol_u_zonu") and base.lower().endswith(".exe"):
+                        incoming = member
         except Exception as e:
             return False, f"Ошибка при чтении архива: {e}"
 
@@ -154,6 +166,10 @@ class LocalUpdater:
             if renamed and os.path.exists(exe_renamed):
                 shutil.move(exe_renamed, backup_path)
 
+            # Новый exe приводим к текущему имени: перезапуск должен
+            # запустить именно обновлённую версию.
+            self._adopt_incoming_exe(incoming, exe_path)
+
         except Exception as e:
             # Откат изменений при сбое
             if renamed and os.path.exists(exe_renamed):
@@ -169,6 +185,33 @@ class LocalUpdater:
             return False, f"Ошибка распаковки: {e}"
 
         return True, f"Обновление успешно применено. Резервная копия: _backup\\{backup_filename}"
+
+    def _adopt_incoming_exe(self, incoming, target_path):
+        """Переименовывает распакованный exe в текущее имя и пишет version.json."""
+        try:
+            if incoming and os.path.basename(incoming) != self.current_exe:
+                src = os.path.join(self.workdir, incoming)
+                if os.path.exists(src) and os.path.abspath(src) != os.path.abspath(target_path):
+                    if os.path.exists(target_path):
+                        try:
+                            os.remove(target_path)
+                        except Exception:
+                            pass
+                    os.replace(src, target_path)
+            self._write_version_marker(incoming or self.current_exe)
+            return True
+        except Exception:
+            return False
+
+    def _write_version_marker(self, exe_filename):
+        """Пишет version.json рядом с exe: оттуда приложение берёт версию."""
+        m = re.search(r"(\d+\.\d+\.\d+)", exe_filename or "")
+        ver = m.group(1) if m else None
+        try:
+            with open(os.path.join(self.workdir, "version.json"), "w", encoding="utf-8") as f:
+                json.dump({"version": ver, "exe": os.path.basename(exe_filename or "")}, f, ensure_ascii=False)
+        except Exception:
+            pass
 
     def _make_backup_name(self):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
