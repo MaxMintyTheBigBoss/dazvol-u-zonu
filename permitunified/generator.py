@@ -252,11 +252,9 @@ def build_mapping_145(data: Dict) -> Dict:
         "Placeholder_3": data.get("id_number", ""),
         "Placeholder_4": join_districts(districts),
         "Placeholder_5": (lambda obj_raw, c_raw, pg: (lambda parts: ", ".join([x for x in parts if x]))([(", ".join(str(x) for x in obj_raw) if isinstance(obj_raw, list) else (obj_raw or "")), c_raw or "", ("территория ГПНИУ \"ПГРЭЗ\"" if pg else "")]))(data.get("objects", []) if isinstance(data.get("objects"), list) else data.get("objects", ""), data.get("custom_object", ""), data.get("include_pgrez", False)),
-        "Placeholder_6": "для вывоза имущества",
         "Placeholder_7": data.get("date_from", ""),
         "Placeholder_8": data.get("date_to", ""),
-        "Placeholder_12": (data.get("vehicles") or [{}])[0].get("make", "") or data.get("car_make", ""),
-        "Placeholder_13": (data.get("vehicles") or [{}])[0].get("number", "") or data.get("car_number", ""),
+        "Placeholder_9": data.get("app_date") or today_dmy(),
         "Placeholder_20": data.get("issued_by", ""),
         "Placeholder_21": data.get("cargo", ""),
     }
