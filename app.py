@@ -64,8 +64,8 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.18"
-APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
+APP_VERSION = "0.1.19"
+APP_EXE_NAME = "dazvol_u_zonu.exe"
 
 
 def _app_dir():

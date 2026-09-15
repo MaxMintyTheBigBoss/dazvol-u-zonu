@@ -12,7 +12,7 @@ from tkinter import ttk, filedialog, messagebox
 import permit_update
 
 OWNER = "MaxMintyTheBigBoss"
-REPO = "zone-permit-generators"
+REPO = "dazvol-u-zonu"
 
 
 class UpdateDialog(tk.Toplevel):

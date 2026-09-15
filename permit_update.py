@@ -167,6 +167,7 @@ class LocalUpdater:
 
         # 1. Читаем архив: проверяем пути и ищем exe
         incoming = None
+        self.incoming_version = None
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 names = zf.namelist()
@@ -177,6 +178,13 @@ class LocalUpdater:
                     base = os.path.basename(member)
                     if base and self._is_exe_name(base):
                         incoming = member
+                    # version.json внутри архива — источник номера версии
+                    if base == "version.json":
+                        try:
+                            vd = json.loads(zf.read(member).decode("utf-8"))
+                            self.incoming_version = (vd or {}).get("version")
+                        except Exception:
+                            pass
         except Exception as e:
             return False, f"Ошибка при чтении архива: {e}"
 
@@ -263,15 +271,21 @@ class LocalUpdater:
                     except Exception:
                         pass
                 os.replace(src, target_path)
-            self._write_version_marker(base or self.current_exe)
+            self._write_version_marker(base or self.current_exe, self.incoming_version)
             return True
         except Exception:
             return False
 
-    def _write_version_marker(self, exe_filename):
-        """Пишет version.json рядом с exe: оттуда приложение берёт версию."""
-        m = re.search(r"(\d+\.\d+\.\d+)", exe_filename or "")
-        ver = m.group(1) if m else None
+    def _write_version_marker(self, exe_filename, version=None):
+        """Пишет version.json рядом с exe: оттуда приложение берёт версию.
+
+        Версию передаём явно (из version.json внутри архива). С фиксированным
+        именем exe номера в имени файла нет, поэтому по имени его не найти.
+        """
+        ver = version
+        if not ver:
+            m = re.search(r"(\d+\.\d+\.\d+)", exe_filename or "")
+            ver = m.group(1) if m else None
         try:
             with open(os.path.join(self.workdir, "version.json"), "w", encoding="utf-8") as f:
                 json.dump({"version": ver, "exe": os.path.basename(exe_filename or "")}, f, ensure_ascii=False)
