@@ -64,7 +64,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.20"
+APP_VERSION = "0.1.21"
 APP_EXE_NAME = "dazvol_u_zonu.exe"
 
 
@@ -728,24 +728,49 @@ class PermitApp(tk.Tk):
         except Exception:
             pass
 
+    def _db_lookup_record(self):
+        """Ищет запись в базе по данным формы. Возвращает (record, key) или (None, key).
+
+        Вынесено отдельно, потому что результат поиска нужен и автоподстановке,
+        и кнопке «Найти в базе» — сравнивать поля до/после нельзя: при успешном
+        поиске имя уже введено пользователем и не меняется.
+        """
+        if self.procedure_code == "19.17.1":
+            key = (self.var_org_info.get() or self.var_org_short.get()).strip()
+            if len(key) < 3:
+                return None, key
+            return db_find_org(key, self.procedure_code), key
+
+        parts = [self.var_last_name.get().strip(),
+                 self.var_first_name.get().strip(),
+                 self.var_middle_name.get().strip()]
+        key = " ".join(p for p in parts if p)
+        if len(parts[0]) < 2:
+            return None, key
+        return db_find(key, self.procedure_code), key
+
     def _on_find_in_db(self):
         """Кнопка «Найти в базе»: ищем и, если не нашли, сообщаем."""
-        before = (self.var_last_name.get(), self.var_first_name.get(),
-                  self.var_middle_name.get(), self.var_org_short.get(),
-                  self.var_org_info.get())
-        self._autofill_applicant()
-        after = (self.var_last_name.get(), self.var_first_name.get(),
-                 self.var_middle_name.get(), self.var_org_short.get(),
-                 self.var_org_info.get())
-        if before == after:
+        try:
+            rec, key = self._db_lookup_record()
+        except Exception as e:
+            messagebox.showerror("Поиск в базе", "Ошибка поиска:\n%s" % e, parent=self)
+            return
+        if not rec:
             messagebox.showinfo(
                 "Поиск в базе",
                 "Совпадений не найдено.\n\n"
-                "Поиск идёт по фамилии, имени и отчеству (для организаций — по наименованию)\n"
-                "среди ранее выданных пропусков по этой же процедуре.",
+                "Искомый ключ: %s\n\n"
+                "Поиск идёт по фамилии, имени и отчеству целиком (для организаций — по наименованию)\n"
+                "среди ранее выданных пропусков по этой же процедуре." % (key or "—"),
                 parent=self)
+            return
+        filled = self._db_fill_from_record(rec)
+        if filled:
+            self.status_bar.config(
+                text="Данные подставлены из базы: " + ", ".join(filled))
         else:
-            self.status_bar.config(text="Данные подставлены из базы")
+            self.status_bar.config(text="Запись найдена, новых данных для подстановки нет")
     def _build_tab_applicant(self, parent):
         pad = {"padx": 6, "pady": 4}
         r = 0
@@ -753,14 +778,9 @@ class PermitApp(tk.Tk):
         if self.procedure_code == "19.17.1":
             # Организация (краткое наименование) — одна строка
             ttk.Label(parent, text="Организация (краткое наименование):").grid(row=r, column=0, sticky="w", **pad)
-            org_row = ttk.Frame(parent)
-            org_row.grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
-            org_row.columnconfigure(0, weight=1)
-            e_org = ttk.Entry(org_row, textvariable=self.var_org_info, width=60)
-            e_org.grid(row=0, column=0, sticky="ew")
-            e_org.bind("<FocusOut>", self._autofill_applicant)
-            ttk.Button(org_row, text="Найти в базе", command=self._on_find_in_db).grid(row=0, column=1, padx=(6, 0))
-            r += 1
+            ttk.Entry(parent, textvariable=self.var_org_info, width=60).grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
+            ttk.Button(parent, text="🔍 Найти в базе", command=self._on_find_in_db).grid(
+                row=r, column=0, columnspan=2, sticky="w", padx=6, pady=4); r += 1
             # Удалено: "Организация (краткое)"
             # Закомментировано: Представитель организации, Фамилия, Имя, Отчество
             # ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
@@ -773,13 +793,7 @@ class PermitApp(tk.Tk):
             # ttk.Entry(parent, textvariable=self.var_org_rep_middle, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
         else:
             ttk.Label(parent, text="Фамилия:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
-            fam_row = ttk.Frame(parent)
-            fam_row.grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
-            fam_row.columnconfigure(0, weight=1)
-            e_last = ttk.Entry(fam_row, textvariable=self.var_last_name, width=30)
-            e_last.grid(row=0, column=0, sticky="ew")
-            e_last.bind("<FocusOut>", self._autofill_applicant)
-            ttk.Button(fam_row, text="Найти в базе", command=self._on_find_in_db).grid(row=0, column=1, padx=(6, 0))
+            ttk.Entry(parent, textvariable=self.var_last_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_first_name, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
             ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
@@ -789,7 +803,12 @@ class PermitApp(tk.Tk):
             e_birth.grid(row=r, column=3, sticky="ew", **pad)
             attach_date_mask(e_birth, self.var_birth_date); r += 1
             ttk.Label(parent, text="Личный номер:").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_id_number, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
+            e_id = ttk.Entry(parent, textvariable=self.var_id_number, width=30)
+            e_id.grid(row=r, column=1, sticky="ew", **pad)
+            e_id.bind("<FocusOut>", self._autofill_applicant)
+            # Кнопка поиска — на своей строке, чтобы её не перекрывали другие поля
+            ttk.Button(parent, text="🔍 Найти в базе", command=self._on_find_in_db).grid(
+                row=r, column=2, columnspan=2, sticky="w", padx=6, pady=4); r += 1
 
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
         ttk.Label(parent, text="Цель въезда:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
