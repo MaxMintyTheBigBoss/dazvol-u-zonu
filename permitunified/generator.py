@@ -639,8 +639,15 @@ def _db_remember(data: Dict, procedure_code: str) -> None:
                 "goal": data.get("goal", ""),
                 "districts": data.get("districts", []),
                 "objects": data.get("objects", ""),
+                "include_pgrez": data.get("include_pgrez", False),
+                "custom_object": data.get("custom_object", ""),
+                "date_from": data.get("date_from", ""),
+                "date_to": data.get("date_to", ""),
+                "issued_by": data.get("issued_by", ""),
                 "car_make": data.get("car_make", ""),
                 "car_number": data.get("car_number", ""),
+                "persons": data.get("persons", []),
+                "vehicles": data.get("vehicles", []),
             }
             db.upsert(rec, procedure_code, "fio")
     finally:

@@ -64,7 +64,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.21"
+APP_VERSION = "0.1.22"
 APP_EXE_NAME = "dazvol_u_zonu.exe"
 
 
@@ -646,14 +646,21 @@ class PermitApp(tk.Tk):
         """Кнопка 'Сменить процедуру' — возврат в меню (из заголовка)."""
         self.show_menu()
 
-    def _db_fill_from_record(self, rec):
-        """Заполняет форму данными записи из базы. Пустые поля не затирает."""
+    def _db_fill_from_record(self, rec, overwrite=False):
+        """Заполняет форму данными записи из базы.
+
+        Кнопка «Найти в базе» вызывает с overwrite=True — заполняются ВСЕ
+        вкладки и поля, сохранённые при первой выдаче пропуска. Автоподстановка
+        при уходе с поля использует overwrite=False: уже введённое не затирается.
+        """
         if not rec:
             return []
 
         def put(var, key):
             val = str(rec.get(key, "") or "").strip()
             if not val:
+                return None
+            if not overwrite and var.get().strip():
                 return None
             var.set(val)
             return val
@@ -663,6 +670,9 @@ class PermitApp(tk.Tk):
             for var, key in (
                 (self.var_org_info, "org_info"),
                 (self.var_org_short, "org_short"),
+                (self.var_org_rep_last, "org_rep_last"),
+                (self.var_org_rep_first, "org_rep_first"),
+                (self.var_org_rep_middle, "org_rep_middle"),
             ):
                 if put(var, key):
                     filled.append(key)
@@ -683,19 +693,53 @@ class PermitApp(tk.Tk):
         if not self.procedure.goal_fixed and put(self.var_goal, "goal"):
             filled.append("goal")
 
-        # Груз
+        # Груз (вкладка 5 у 14.5)
         if self.procedure.has_cargo_permit and put(self.var_cargo, "cargo"):
             filled.append("cargo")
 
-        # Сопровождающие и машины — список целиком (только если в базе есть)
+        # Срок действия
+        if put(self.var_date_from, "date_from"):
+            filled.append("date_from")
+        if put(self.var_date_to, "date_to"):
+            filled.append("date_to")
+
+        # Кому на подписание
+        if put(self.var_issued_by, "issued_by"):
+            filled.append("issued_by")
+
+        # Районы (вкладка 4)
+        districts = rec.get("districts") or []
+        if districts and hasattr(self, "district_vars"):
+            for d, var in self.district_vars.items():
+                if d in districts:
+                    var.set(True)
+            filled.append("districts")
+            if hasattr(self, "_refresh_objects"):
+                self._refresh_objects()
+
+        # Объекты (вкладка 4)
+        if put(self.var_custom_object, "custom_object"):
+            filled.append("custom_object")
+        objects = rec.get("objects") or []
+        if objects and hasattr(self, "objects_clb"):
+            try:
+                self.objects_clb.set_checked(list(objects))
+                filled.append("objects")
+            except Exception:
+                pass
+        if rec.get("include_pgrez"):
+            self.var_include_pgrez.set(True)
+            filled.append("include_pgrez")
+
+        # Сопровождающие и машины — списки целиком
         persons = rec.get("persons") or []
-        if persons and hasattr(self, "persons") and not self.persons:
+        if persons and hasattr(self, "persons") and (overwrite or not self.persons):
             self.persons = list(persons)
             if hasattr(self, "persons_listbox"):
                 self._refresh_persons_list()
             filled.append("persons")
         vehicles = rec.get("vehicles") or []
-        if vehicles and hasattr(self, "vehicles") and not self.vehicles:
+        if vehicles and hasattr(self, "vehicles") and (overwrite or not self.vehicles):
             self.vehicles = list(vehicles)
             if hasattr(self, "vehicles_listbox"):
                 self._refresh_vehicles_list()
@@ -765,12 +809,12 @@ class PermitApp(tk.Tk):
                 "среди ранее выданных пропусков по этой же процедуре." % (key or "—"),
                 parent=self)
             return
-        filled = self._db_fill_from_record(rec)
+        filled = self._db_fill_from_record(rec, overwrite=True)
         if filled:
             self.status_bar.config(
-                text="Данные подставлены из базы: " + ", ".join(filled))
+                text="Из базы заполнено: " + ", ".join(filled))
         else:
-            self.status_bar.config(text="Запись найдена, новых данных для подстановки нет")
+            self.status_bar.config(text="Запись найдена, но данных для подстановки нет")
     def _build_tab_applicant(self, parent):
         pad = {"padx": 6, "pady": 4}
         r = 0
