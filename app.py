@@ -4,6 +4,7 @@
 Объединяет 14.3, 14.5, 19.17.1 в одно окно с выбором процедуры при запуске.
 """
 import os
+import re
 import sys
 from typing import Optional
 from datetime import datetime
@@ -62,7 +63,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.13"
+APP_VERSION = "0.1.14"
 APP_EXE_NAME = f"dazvol_u_zonu_ver.{APP_VERSION}.exe"
 BG_COLOR = "#E6EBE0"
 BTN_BG = "#CAD4CC"
@@ -116,6 +117,76 @@ class CheckListbox(ttk.Frame):
         checked_set = set(checked)
         for item, var in self.vars.items():
             var.set(item in checked_set)
+
+
+class DateMask:
+    """Маска ввода ДД.ММ.ГГГГ для обычного Entry (без календаря).
+
+    Устанавливает точки после 2-й и 4-й цифры и держит курсор в конце.
+    """
+
+    LIMITS = (2, 2, 4)
+
+    @classmethod
+    def format_text(cls, text: str):
+        """Возвращает (строка, позиция_курсора) для ввода ДД.ММ.ГГГГ."""
+        if "." not in text:
+            d = "".join(ch for ch in text if ch.isdigit())[:8]
+            if len(d) > 2:
+                s = d[:2] + "."
+                if len(d) > 4:
+                    s += d[2:4] + "." + d[4:]
+                else:
+                    s += d[2:]
+                return s, len(s)
+        parts = text.split(".")
+        segs = []
+        for i, lim in enumerate(cls.LIMITS):
+            seg = "".join(c for c in (parts[i] if i < len(parts) else "") if c.isdigit())
+            segs.append(seg[:lim])
+        out = ""
+        for i, seg in enumerate(segs):
+            out += seg
+            if i < 2:
+                next_started = len(segs[i + 1]) > 0
+                if len(seg) == cls.LIMITS[i] or next_started:
+                    out += "."
+        return out, len(out)
+
+    @classmethod
+    def parse(cls, text: str):
+        """Разбирает ДД.ММ.ГГГГ в date или возвращает None."""
+        from datetime import date
+        t = (text or "").strip()
+        if not re.match(r"^\d{2}\.\d{2}\.\d{4}$", t):
+            return None
+        try:
+            d, m, y = (int(x) for x in t.split("."))
+            return date(y, m, d)
+        except Exception:
+            return None
+
+
+def attach_date_mask(entry, var):
+    """Включает маску ДД.ММ.ГГГГ на обычном ttk.Entry."""
+    SKIP = (
+        "Left", "Right", "Home", "End", "Up", "Down", "Tab",
+        "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
+    )
+
+    def on_type(event):
+        if event.keysym in SKIP:
+            return
+        formatted, pos = DateMask.format_text(var.get())
+        if formatted != var.get():
+            var.set(formatted)
+        try:
+            entry.icursor(pos)
+        except Exception:
+            pass
+
+    entry.bind("<KeyRelease>", on_type)
+    return entry
 
 
 class DateEntryWithCalendar(ttk.Frame):
@@ -288,6 +359,7 @@ class PermitApp(tk.Tk):
         self.current_frame: Optional[ttk.Frame] = None
         
         # Ensure window is shown
+        self._set_icon()
         self.deiconify()
         self.update_idletasks()
         
@@ -296,6 +368,19 @@ class PermitApp(tk.Tk):
     # ------------------------------------------------------------------
     # Главное меню
     # ------------------------------------------------------------------
+    def _set_icon(self):
+        """Ставит иконку окна из app.ico (рядом с exe или исходниками)."""
+        try:
+            if getattr(sys, "frozen", False):
+                base = Path(sys.executable).parent
+            else:
+                base = Path(__file__).parent
+            ico = base / "app.ico"
+            if ico.exists():
+                self.iconbitmap(str(ico))
+        except Exception:
+            pass
+
     def show_menu(self):
         """Показать главное меню выбора процедуры."""
         self._clear_content()
@@ -560,7 +645,9 @@ class PermitApp(tk.Tk):
             ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_middle_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Дата рождения:").grid(row=r, column=2, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_birth_date, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
+            e_birth = ttk.Entry(parent, textvariable=self.var_birth_date, width=30)
+            e_birth.grid(row=r, column=3, sticky="ew", **pad)
+            attach_date_mask(e_birth, self.var_birth_date); r += 1
             ttk.Label(parent, text="Личный номер:").grid(row=r, column=0, sticky="w", **pad)
             ttk.Entry(parent, textvariable=self.var_id_number, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
 
@@ -775,6 +862,27 @@ class PermitApp(tk.Tk):
             })
         return data
 
+    @staticmethod
+    def _check_period(date_from: str, date_to: str):
+        """Проверяет срок: корректные даты, «по» не раньше «с», не больше 1 года.
+
+        Возвращает текст ошибки или None.
+        """
+        d1 = DateMask.parse(date_from)
+        d2 = DateMask.parse(date_to)
+        if d1 is None or d2 is None:
+            return "Даты должны быть в формате ДД.ММ.ГГГГ."
+        if d2 < d1:
+            return "Дата «По» не может быть раньше даты «С»."
+        # 1 год: сравниваем с той же датой следующего года
+        try:
+            same_next = d1.replace(year=d1.year + 1)
+        except ValueError:
+            same_next = d1.replace(year=d1.year + 1, day=28)
+        if d2 > same_next:
+            return "Срок действия не может превышать 1 год."
+        return None
+
     def _validate(self) -> bool:
         data = self._collect_data()
         if self.procedure_code == "19.17.1":
@@ -793,6 +901,10 @@ class PermitApp(tk.Tk):
                 return False
         if not data["date_from"] or not data["date_to"]:
             messagebox.showwarning(APP_NAME, "Укажите срок действия (с/по).")
+            return False
+        err = self._check_period(data["date_from"], data["date_to"])
+        if err:
+            messagebox.showwarning(APP_NAME, err)
             return False
         return True
 
@@ -878,7 +990,9 @@ class PersonDialog143(tk.Toplevel):
         ttk.Label(self, text="Отчество:").grid(row=2, column=0, sticky="w", **pad)
         ttk.Entry(self, textvariable=self.var_middle, width=30).grid(row=2, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Дата рождения:").grid(row=3, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_birth, width=30).grid(row=3, column=1, sticky="ew", **pad)
+        e_pbirth = ttk.Entry(self, textvariable=self.var_birth, width=30)
+        e_pbirth.grid(row=3, column=1, sticky="ew", **pad)
+        attach_date_mask(e_pbirth, self.var_birth)
 
         btns = ttk.Frame(self)
         btns.grid(row=4, column=0, columnspan=2, pady=12)

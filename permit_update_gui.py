@@ -27,6 +27,7 @@ class UpdateDialog(tk.Toplevel):
         self.grab_set()
         self.current_version = current_version
         self.exe_name = exe_name
+        self.last_url = ""
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
@@ -44,6 +45,18 @@ class UpdateDialog(tk.Toplevel):
 
         self.online_text = tk.Text(tab1, wrap="word", height=14, state="disabled")
         self.online_text.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # Строка ссылки на релиз: только чтение + кнопка «Копировать»
+        link_row = ttk.Frame(tab1)
+        link_row.pack(fill="x", padx=8, pady=(0, 8))
+        self.link_var = tk.StringVar(value="")
+        ttk.Entry(link_row, textvariable=self.link_var, state="readonly").pack(
+            side="left", fill="x", expand=True
+        )
+        self.btn_copy = ttk.Button(
+            link_row, text="Копировать", command=self._copy_link, state="disabled"
+        )
+        self.btn_copy.pack(side="left", padx=(4, 0))
 
         # --- Вкладка 2: из файла ---
         tab2 = ttk.Frame(nb)
@@ -93,6 +106,33 @@ class UpdateDialog(tk.Toplevel):
             padx=12, pady=12, anchor="nw"
         )
 
+    def _set_link(self, url):
+        """Показывает ссылку в поле и активирует кнопку «Копировать»."""
+        self.last_url = (url or "").strip()
+        try:
+            self.link_var.set(self.last_url)
+            self.btn_copy.configure(state="normal" if self.last_url else "disabled")
+        except Exception:
+            pass
+
+    def _copy_link(self):
+        """Копирует ссылку на релиз в буфер обмена."""
+        url = (self.last_url or "").strip()
+        if not url:
+            return
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(url)
+            self.update_idletasks()
+        except Exception:
+            pass
+        # Временно подтверждаем копирование на самой кнопке
+        try:
+            self.btn_copy.configure(text="Скопировано")
+            self.after(1500, lambda: self.btn_copy.configure(text="Копировать"))
+        except Exception:
+            pass
+
     def _set_online_text(self, text):
         """Безопасное обновление текста в виде виджета."""
         self.online_text.configure(state="normal")
@@ -130,6 +170,7 @@ class UpdateDialog(tk.Toplevel):
                 f"Вы используете последнюю версию ({self.current_version}).\n\n"
                 f"Последний релиз: {result['tag']}"
             )
+            self._set_link(result.get("html_url", ""))
             return
 
         text = (
@@ -141,6 +182,7 @@ class UpdateDialog(tk.Toplevel):
             "Что нового:\n" + (result["body"][:500] or "(без описания)")
         )
         self._set_online_text(text)
+        self._set_link(result.get("html_url", ""))
 
     def _pick_zip(self):
         path = filedialog.askopenfilename(
