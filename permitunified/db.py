@@ -236,9 +236,16 @@ class UnifiedPermitDB:
 
 
 def get_db_path() -> str:
-    """Путь к БД рядом с exe/скриптом."""
+    """Путь к БД рядом с exe.
+
+    ВАЖНО: у собранного в один файл exe всегда есть sys._MEIPASS — временная
+    папка распаковки, которая удаляется при выходе. Если брать базу оттуда,
+    данные теряются. Поэтому база всегда берётся от папки самого exe
+    (sys.argv[0]), а _MEIPASS — только как крайний запасной вариант.
+    """
     if getattr(sys, 'frozen', False):
-        base = Path(os.path.dirname(os.path.abspath(sys.argv[0])))
+        exe_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        base = Path(exe_dir)
     else:
         base = Path(__file__).parent.parent
     return str(base / "data" / "permits_unified.sqlite")

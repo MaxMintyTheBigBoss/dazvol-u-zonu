@@ -27,12 +27,19 @@ _PH_RE = re.compile(r"\*{0,2}(Placeholder_\d+(?:\.\d+)?)\*{0,2}")
 
 
 def resource_path() -> str:
-    """Путь к ресурсам (совместимо с PyInstaller)."""
+    """Путь к ресурсам.
+
+    Для собранного в один файл exe сначала проверяем папку самого exe: если
+    рядом лежит внешняя папка templates, берём шаблоны оттуда (так работают
+    правки пользователя без пересборки). И только если внешних шаблонов нет —
+    используем встроенные из sys._MEIPASS.
+    """
     if getattr(sys, "frozen", False):
-        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.argv[0])))
-    else:
-        base = Path(__file__).resolve().parent.parent
-    return str(base)
+        exe_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        if os.path.isdir(os.path.join(exe_dir, "templates")):
+            return exe_dir
+        return getattr(sys, "_MEIPASS", exe_dir)
+    return str(Path(__file__).resolve().parent.parent)
 
 
 def template_dir() -> str:

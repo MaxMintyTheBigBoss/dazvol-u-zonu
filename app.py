@@ -64,7 +64,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.22"
+APP_VERSION = "0.1.24"
 APP_EXE_NAME = "dazvol_u_zonu.exe"
 
 
