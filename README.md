@@ -10,7 +10,7 @@
 - Установка обновлений из локального .zip файла
 
 ## Установка
-Скачайте `dazvol_u_zonu.exe` из [Releases](https://github.com/MaxMintyTheBigBoss/dazvol-u-zonu/releases) и запустите.
+Скачайте `dazvol_u_zonu.exe` из [Releases](https://github.com/MaxMintyTheBigBoss/dazvol-u-zonu/releases/latest) и запустите.
 
 ## Запуск из исходников
 ```bash
@@ -24,7 +24,7 @@ pyinstaller --noconfirm dazvol_u_zonu.spec
 ```
 
 ## Версия
-**0.0.2**
+**0.1.25**
 
 ## Автор
 Соломейчук Алексей / Salamiaichuk Aliaksei
