@@ -24,6 +24,7 @@ a = Analysis(
         'permitunified.procedures',
         'permitunified.db',
         'permitunified.generator',
+        'permitunified.settings',
     ],
     hookspath=[],
     hooksconfig={},
