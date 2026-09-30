@@ -32,6 +32,7 @@ try:
     )
     from permitunified.procedures import ProcedureConfig, list_procedures, get_procedure
     from permitunified.db import export_db_dialog
+    from permitunified.settings import load_settings, save_settings
 except ImportError:
     # Fallback для PyInstaller — загружаем напрямую
     import importlib.util
@@ -45,6 +46,9 @@ except ImportError:
     _gen = _load("permitunified.generator", str(Path(__file__).parent / "permitunified" / "generator.py"))
     _proc = _load("permitunified.procedures", str(Path(__file__).parent / "permitunified" / "procedures.py"))
     _db = _load("permitunified.db", str(Path(__file__).parent / "permitunified" / "db.py"))
+    _set = _load("permitunified.settings", str(Path(__file__).parent / "permitunified" / "settings.py"))
+    load_settings = _set.load_settings
+    save_settings = _set.save_settings
 
     generate_all = _gen.generate_all
     db_find = _gen.db_find
@@ -64,7 +68,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.24"
+APP_VERSION = "0.1.25"
 APP_EXE_NAME = "dazvol_u_zonu.exe"
 
 
@@ -192,6 +196,57 @@ class DateMask:
             return date(y, m, d)
         except Exception:
             return None
+
+
+# Соответствие «подписант -> район по умолчанию» (из предложений пользователя).
+# У Шабловского В.О., Соломейчука А.В., Путьковой Т.М. района нет.
+SIGNER_DISTRICT = {
+    "Главный специалист Гвоздарев А.А.": "Кормянский",
+    "Главный специалист Геращенко Г.Н.": "Чечерский",
+    "Главный специалист Першко А.С.": "Ветковский",
+    "Главный специалист Одиноченко И.В.": "Добрушский",
+    "Главный специалист Колесан А.И.": "Брагинский",
+    "Главный специалист Новик П.Н.": "Хойникский",
+    "Главный специалист Курило А.В.": "Наровлянский",
+}
+
+
+def cap_word(s: str) -> str:
+    """Делает первую букву заглавной, остальные строчными (для Ф.И.О.)."""
+    s = (s or "").strip()
+    if not s:
+        return ""
+    return s[0].upper() + s[1:].lower()
+
+
+def cap_id(s: str) -> str:
+    """Приводит личный/гос. номер к верхнему регистру."""
+    return (s or "").strip().upper()
+
+
+def _upper_word(cls, text):
+    """Обработчик FocusOut для Ф.И.О.: первая заглавная, остальное строчное."""
+    return cap_word(text)
+
+
+def bind_enter_as_tab(widget):
+    """Enter в поле = Tab: переход к следующему виджету."""
+    def on_return(event):
+        try:
+            event.widget.tk_focusNext().focus_set()
+        except Exception:
+            pass
+        return "break"
+    widget.bind("<Return>", on_return)
+
+
+def _safe_focus(widget):
+    """Ставит фокус на виджет, если он ещё существует (не уничтожен)."""
+    try:
+        if widget is not None and widget.winfo_exists():
+            widget.focus_set()
+    except Exception:
+        pass
 
 
 def attach_date_mask(entry, var):
@@ -363,6 +418,8 @@ class MainMenuFrame(ttk.Frame):
                    command=self.app.action_check_updates).pack(side="left", fill="x", expand=True, padx=2)
         ttk.Button(actions, text="ℹ️ О программе",
                    command=self.app.action_about).pack(side="left", fill="x", expand=True, padx=2)
+        ttk.Button(actions, text="⚙️ Настройки",
+                   command=self.app.action_settings).pack(side="left", fill="x", expand=True, padx=2)
 
         ttk.Button(self, text="Выход", command=self.app.action_exit).pack(fill="x", pady=(8, 0))
 
@@ -384,7 +441,13 @@ class PermitApp(tk.Tk):
         self.configure(bg=BG_COLOR)
 
         self.current_frame: Optional[ttk.Frame] = None
-        
+
+        # Пользовательские настройки (кому на подписание, район по умолчанию)
+        try:
+            self.settings = load_settings()
+        except Exception:
+            self.settings = {}
+
         # Ensure window is shown
         self._set_icon()
         self.deiconify()
@@ -495,6 +558,17 @@ class PermitApp(tk.Tk):
 
     def action_about(self):
         self._show_about()
+
+    def action_settings(self):
+        """Окно настроек: подписант по умолчанию, район по умолчанию."""
+        dlg = SettingsDialog(self, self.settings or {}, get_procedure)
+        self.wait_window(dlg)
+        if dlg.result is not None:
+            self.settings = dlg.result
+            try:
+                save_settings(self.settings)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Служебные
@@ -819,10 +893,18 @@ class PermitApp(tk.Tk):
         pad = {"padx": 6, "pady": 4}
         r = 0
 
+        first_focus_widget = None
+
         if self.procedure_code == "19.17.1":
             # Организация (краткое наименование) — одна строка
             ttk.Label(parent, text="Организация (краткое наименование):").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_org_info, width=60).grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
+            e_org = ttk.Entry(parent, textvariable=self.var_org_info, width=60)
+            e_org.grid(row=r, column=1, columnspan=3, sticky="ew", **pad); r += 1
+            bind_enter_as_tab(e_org)
+            e_org.bind("<FocusOut>", self._autofill_applicant)
+            # Организация: первая буква заглавная
+            e_org.bind("<FocusOut>", lambda ev: self.var_org_info.set(cap_word(self.var_org_info.get())), add="+")
+            first_focus_widget = e_org
             ttk.Button(parent, text="🔍 Найти в базе", command=self._on_find_in_db).grid(
                 row=r, column=0, columnspan=2, sticky="w", padx=6, pady=4); r += 1
             # Удалено: "Организация (краткое)"
@@ -837,11 +919,14 @@ class PermitApp(tk.Tk):
             # ttk.Entry(parent, textvariable=self.var_org_rep_middle, width=30).grid(row=r, column=1, sticky="ew", **pad); r += 1
         else:
             ttk.Label(parent, text="Фамилия:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_last_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
+            e_last = ttk.Entry(parent, textvariable=self.var_last_name, width=30)
+            e_last.grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Имя:").grid(row=r, column=2, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_first_name, width=30).grid(row=r, column=3, sticky="ew", **pad); r += 1
+            e_first = ttk.Entry(parent, textvariable=self.var_first_name, width=30)
+            e_first.grid(row=r, column=3, sticky="ew", **pad); r += 1
             ttk.Label(parent, text="Отчество:").grid(row=r, column=0, sticky="w", **pad)
-            ttk.Entry(parent, textvariable=self.var_middle_name, width=30).grid(row=r, column=1, sticky="ew", **pad)
+            e_middle = ttk.Entry(parent, textvariable=self.var_middle_name, width=30)
+            e_middle.grid(row=r, column=1, sticky="ew", **pad)
             ttk.Label(parent, text="Дата рождения:").grid(row=r, column=2, sticky="w", **pad)
             e_birth = ttk.Entry(parent, textvariable=self.var_birth_date, width=30)
             e_birth.grid(row=r, column=3, sticky="ew", **pad)
@@ -850,6 +935,16 @@ class PermitApp(tk.Tk):
             e_id = ttk.Entry(parent, textvariable=self.var_id_number, width=30)
             e_id.grid(row=r, column=1, sticky="ew", **pad)
             e_id.bind("<FocusOut>", self._autofill_applicant)
+
+            # Ф.И.О.: первая буква заглавная при уходе с поля
+            for _e, _v in ((e_last, self.var_last_name), (e_first, self.var_first_name), (e_middle, self.var_middle_name)):
+                _e.bind("<FocusOut>", lambda ev, v=_v: v.set(cap_word(v.get())), add="+")
+            # Личный номер — всегда заглавными
+            e_id.bind("<FocusOut>", lambda ev: self.var_id_number.set(cap_id(self.var_id_number.get())), add="+")
+            # Enter = Tab по всем полям заявителя
+            for _e in (e_last, e_first, e_middle, e_birth, e_id):
+                bind_enter_as_tab(_e)
+            first_focus_widget = e_last
             # Кнопка поиска — на своей строке, чтобы её не перекрывали другие поля
             ttk.Button(parent, text="🔍 Найти в базе", command=self._on_find_in_db).grid(
                 row=r, column=2, columnspan=2, sticky="w", padx=6, pady=4); r += 1
@@ -860,9 +955,16 @@ class PermitApp(tk.Tk):
             self.var_goal.set(self.procedure.goal_fixed)
             ttk.Label(parent, text=self.procedure.goal_fixed, foreground="gray").grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
         elif self.procedure.goal_options:
-            ttk.Combobox(parent, textvariable=self.var_goal, values=self.procedure.goal_options, width=55).grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
+            # Первая цель — по умолчанию (для 19.17.1 «для осуществления служебной деятельности»)
+            if not self.var_goal.get().strip():
+                self.var_goal.set(self.procedure.goal_options[0])
+            cb_goal = ttk.Combobox(parent, textvariable=self.var_goal, values=self.procedure.goal_options, width=55)
+            cb_goal.grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
+            bind_enter_as_tab(cb_goal)
         else:
-            ttk.Entry(parent, textvariable=self.var_goal, width=60).grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
+            e_goal = ttk.Entry(parent, textvariable=self.var_goal, width=60)
+            e_goal.grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
+            bind_enter_as_tab(e_goal)
 
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
         ttk.Label(parent, text="Срок действия:", font=("", 11, "bold")).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
@@ -873,11 +975,52 @@ class PermitApp(tk.Tk):
 
         ttk.Separator(parent, orient="horizontal").grid(row=r, column=0, columnspan=4, sticky="ew", **pad); r += 1
         ttk.Label(parent, text="Кому на подписание:", font=("", 11, "bold")).grid(row=r, column=0, sticky="w", **pad)
-        self.var_issued_by = tk.StringVar(value=self.procedure.signers[0] if self.procedure.signers else "")
-        ttk.Combobox(parent, textvariable=self.var_issued_by, values=self.procedure.signers, width=55, state="readonly").grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
+        # Подписант по умолчанию — из настроек, иначе первый из списка
+        _default_signer = (self.settings or {}).get("default_signer", "") or ""
+        if _default_signer not in self.procedure.signers:
+            _default_signer = self.procedure.signers[0] if self.procedure.signers else ""
+        self.var_issued_by = tk.StringVar(value=_default_signer)
+        cb_signer = ttk.Combobox(parent, textvariable=self.var_issued_by, values=self.procedure.signers, width=55, state="readonly")
+        cb_signer.grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
+        bind_enter_as_tab(cb_signer)
+        # Смена подписанта -> автоматически отмечается «его» район
+        cb_signer.bind("<<ComboboxSelected>>", lambda ev: self._apply_signer_district(self.var_issued_by.get()))
 
         parent.columnconfigure(1, weight=1)
         parent.columnconfigure(3, weight=1)
+
+        # Автофокус на первом поле ввода (безопасно: виджет может быть уже уничтожен)
+        if first_focus_widget is not None:
+            self.after(80, lambda w=first_focus_widget: _safe_focus(w))
+        # Район по умолчанию — если подписант по умолчанию задан в настройках
+        if _default_signer:
+            self._apply_signer_district(_default_signer)
+
+    def _apply_signer_district(self, signer: str):
+        """Отмечает «родной» район выбранного подписанта (снимая прежние отметки).
+
+        Соответствие подписант -> район задано в SIGNER_DISTRICT. Для подписантов
+        без закреплённого района ничего не меняем.
+        """
+        if not hasattr(self, "district_vars") or not self.district_vars:
+            return
+        district = SIGNER_DISTRICT.get(signer or "")
+        if not district:
+            return
+        for name, var in self.district_vars.items():
+            var.set(name == district)
+        self._refresh_objects()
+
+    def _apply_default_district(self):
+        """Отмечает район из настроек, если он задан и ещё ничего не отмечено."""
+        if not hasattr(self, "district_vars") or not self.district_vars:
+            return
+        if any(v.get() for v in self.district_vars.values()):
+            return
+        district = (self.settings or {}).get("default_district", "") or ""
+        if district and district in self.district_vars:
+            self.district_vars[district].set(True)
+            self._refresh_objects()
 
     def _build_tab_persons(self, parent):
         toolbar = ttk.Frame(parent)
@@ -1006,6 +1149,11 @@ class PermitApp(tk.Tk):
 
         for var in self.district_vars.values():
             var.trace_add("write", lambda *a: self._refresh_objects())
+
+        # Район из настроек — отметить, если пользователь ещё ничего не выбрал.
+        # Если в настройках задан подписант, его район уже отмечен
+        # в _apply_signer_district, и здесь ничего не перезаписывается.
+        self.after(60, self._apply_default_district)
 
     def _refresh_objects(self):
         if self.procedure_code == "19.17.1":
@@ -1187,15 +1335,25 @@ class PersonDialog143(tk.Toplevel):
 
         pad = {"padx": 8, "pady": 6}
         ttk.Label(self, text="Фамилия:").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_last, width=30).grid(row=0, column=1, sticky="ew", **pad)
+        e_last = ttk.Entry(self, textvariable=self.var_last, width=30)
+        e_last.grid(row=0, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Имя:").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_first, width=30).grid(row=1, column=1, sticky="ew", **pad)
+        e_first = ttk.Entry(self, textvariable=self.var_first, width=30)
+        e_first.grid(row=1, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Отчество:").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_middle, width=30).grid(row=2, column=1, sticky="ew", **pad)
+        e_middle = ttk.Entry(self, textvariable=self.var_middle, width=30)
+        e_middle.grid(row=2, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Дата рождения:").grid(row=3, column=0, sticky="w", **pad)
         e_pbirth = ttk.Entry(self, textvariable=self.var_birth, width=30)
         e_pbirth.grid(row=3, column=1, sticky="ew", **pad)
         attach_date_mask(e_pbirth, self.var_birth)
+
+        # Ф.И.О.: первая буква заглавная; Enter = Tab
+        for _e, _v in ((e_last, self.var_last), (e_first, self.var_first), (e_middle, self.var_middle)):
+            _e.bind("<FocusOut>", lambda ev, v=_v: v.set(cap_word(v.get())), add="+")
+        for _e in (e_last, e_first, e_middle, e_pbirth):
+            bind_enter_as_tab(_e)
+        self.after(50, lambda w=e_last: _safe_focus(w))
 
         btns = ttk.Frame(self)
         btns.grid(row=4, column=0, columnspan=2, pady=12)
@@ -1246,13 +1404,25 @@ class PersonDialog19171(tk.Toplevel):
 
         pad = {"padx": 8, "pady": 6}
         ttk.Label(self, text="Фамилия:").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_last, width=30).grid(row=0, column=1, sticky="ew", **pad)
+        e_last = ttk.Entry(self, textvariable=self.var_last, width=30)
+        e_last.grid(row=0, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Имя:").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_first, width=30).grid(row=1, column=1, sticky="ew", **pad)
+        e_first = ttk.Entry(self, textvariable=self.var_first, width=30)
+        e_first.grid(row=1, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Отчество:").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_middle, width=30).grid(row=2, column=1, sticky="ew", **pad)
+        e_middle = ttk.Entry(self, textvariable=self.var_middle, width=30)
+        e_middle.grid(row=2, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Должность:").grid(row=3, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_pos, width=30).grid(row=3, column=1, sticky="ew", **pad)
+        e_pos = ttk.Entry(self, textvariable=self.var_pos, width=30)
+        e_pos.grid(row=3, column=1, sticky="ew", **pad)
+
+        # Ф.И.О. и Должность: первая буква заглавная; Enter = Tab
+        for _e, _v in ((e_last, self.var_last), (e_first, self.var_first),
+                       (e_middle, self.var_middle), (e_pos, self.var_pos)):
+            _e.bind("<FocusOut>", lambda ev, v=_v: v.set(cap_word(v.get())), add="+")
+        for _e in (e_last, e_first, e_middle, e_pos):
+            bind_enter_as_tab(_e)
+        self.after(50, lambda w=e_last: _safe_focus(w))
 
         btns = ttk.Frame(self)
         btns.grid(row=4, column=0, columnspan=2, pady=12)
@@ -1301,9 +1471,18 @@ class VehicleDialog(tk.Toplevel):
 
         pad = {"padx": 8, "pady": 6}
         ttk.Label(self, text="Марка-модель:").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_make, width=30).grid(row=0, column=1, sticky="ew", **pad)
+        e_make = ttk.Entry(self, textvariable=self.var_make, width=30)
+        e_make.grid(row=0, column=1, sticky="ew", **pad)
         ttk.Label(self, text="Гос. номер:").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(self, textvariable=self.var_number, width=30).grid(row=1, column=1, sticky="ew", **pad)
+        e_number = ttk.Entry(self, textvariable=self.var_number, width=30)
+        e_number.grid(row=1, column=1, sticky="ew", **pad)
+
+        # Марка-модель: первая буква заглавная; Гос. номер: полностью заглавными
+        e_make.bind("<FocusOut>", lambda ev: self.var_make.set(cap_word(self.var_make.get())), add="+")
+        e_number.bind("<FocusOut>", lambda ev: self.var_number.set(cap_id(self.var_number.get())), add="+")
+        for _e in (e_make, e_number):
+            bind_enter_as_tab(_e)
+        self.after(50, lambda w=e_make: _safe_focus(w))
 
         btns = ttk.Frame(self)
         btns.grid(row=2, column=0, columnspan=2, pady=12)
@@ -1318,6 +1497,72 @@ class VehicleDialog(tk.Toplevel):
         self.result = {
             "make": self.var_make.get().strip(),
             "number": self.var_number.get().strip(),
+        }
+        self.destroy()
+
+
+class SettingsDialog(tk.Toplevel):
+    """Окно настроек: подписант по умолчанию и связанный с ним район."""
+
+    def __init__(self, parent, settings, get_proc):
+        super().__init__(parent)
+        self.title("Настройки")
+        self.geometry("520x300")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.result = None
+        self.update_idletasks()
+        parent_app = parent
+        while parent_app and not isinstance(parent_app, tk.Tk):
+            parent_app = parent_app.master
+        if parent_app and isinstance(parent_app, tk.Tk):
+            x = parent_app.winfo_rootx() + max(0, (parent_app.winfo_width() - self.winfo_reqwidth()) // 2)
+            y = parent_app.winfo_rooty() + max(0, (parent_app.winfo_height() - self.winfo_reqheight()) // 2)
+            self.geometry("+" + str(max(10, x)) + "+" + str(max(10, y)))
+
+        pad = {"padx": 10, "pady": 8}
+        ttk.Label(self, text="Кому на подписание по умолчанию:", font=("", 11, "bold")).grid(
+            row=0, column=0, sticky="w", **pad)
+        self.var_signer = tk.StringVar(value=(settings or {}).get("default_signer", "") or "")
+        signers = list(get_proc("14.3").signers)
+        cb = ttk.Combobox(self, textvariable=self.var_signer, values=[""] + signers,
+                          width=50, state="readonly")
+        cb.grid(row=0, column=1, sticky="ew", **pad)
+
+        ttk.Label(self, text="Район по умолчанию:", font=("", 11, "bold")).grid(
+            row=1, column=0, sticky="w", **pad)
+        self.var_district = tk.StringVar(value=(settings or {}).get("default_district", "") or "")
+        districts = list(get_proc("14.3").districts)
+        self.cb_district = ttk.Combobox(self, textvariable=self.var_district,
+                                        values=[""] + districts, width=50, state="readonly")
+        self.cb_district.grid(row=1, column=1, sticky="ew", **pad)
+
+        ttk.Label(
+            self,
+            text=("Район подставляется автоматически по выбранному подписанту.\n"
+                  "Здесь можно задать район вручную, если подписант его не имеет."),
+            foreground="gray", justify="left",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 8))
+
+        # Смена подписанта -> предложить его «родной» район
+        cb.bind("<<ComboboxSelected>>", self._on_signer_change)
+
+        btns = ttk.Frame(self)
+        btns.grid(row=3, column=0, columnspan=2, pady=12)
+        ttk.Button(btns, text="Сохранить", command=self._ok).pack(side="left", padx=6)
+        ttk.Button(btns, text="Отмена", command=self.destroy).pack(side="left", padx=6)
+        self.columnconfigure(1, weight=1)
+
+    def _on_signer_change(self, event=None):
+        d = SIGNER_DISTRICT.get(self.var_signer.get())
+        if d:
+            self.var_district.set(d)
+
+    def _ok(self):
+        self.result = {
+            "default_signer": self.var_signer.get().strip(),
+            "default_district": self.var_district.get().strip(),
         }
         self.destroy()
 
