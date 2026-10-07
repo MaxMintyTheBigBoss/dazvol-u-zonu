@@ -24,7 +24,7 @@ pyinstaller --noconfirm dazvol_u_zonu.spec
 ```
 
 ## Версия
-**0.1.25**
+**0.1.27**
 
 ## Автор
 Соломейчук Алексей / Salamiaichuk Aliaksei
