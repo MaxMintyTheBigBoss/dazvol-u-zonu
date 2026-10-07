@@ -68,7 +68,7 @@ from permit_update_gui import UpdateDialog
 
 # Константы
 APP_NAME = "dazvol_u_zonu"
-APP_VERSION = "0.1.25"
+APP_VERSION = "0.1.27"
 APP_EXE_NAME = "dazvol_u_zonu.exe"
 
 
@@ -224,20 +224,217 @@ def cap_id(s: str) -> str:
     return (s or "").strip().upper()
 
 
+def cap_first(s: str) -> str:
+    """Делает заглавной ТОЛЬКО первую букву, остальное не трогает.
+
+    Для полей «Организация» и «Марка-модель»: если пользователь набрал
+    часть букв заглавными, они такими и остаются.
+    """
+    s = (s or "").strip()
+    if not s:
+        return ""
+    return s[0].upper() + s[1:]
+
+
+def _clip_copy(event):
+    """Ctrl+C: копирует выделение в буфер обмена."""
+    w = event.widget
+    try:
+        if w.selection_present():
+            w.clipboard_clear()
+            w.clipboard_append(w.selection_get())
+    except Exception:
+        pass
+    return "break"
+
+
+def _clip_cut(event):
+    """Ctrl+X: копирует выделение и удаляет его."""
+    w = event.widget
+    try:
+        if w.selection_present():
+            text = w.selection_get()
+            w.clipboard_clear()
+            w.clipboard_append(text)
+            w.delete("sel.first", "sel.last")
+    except Exception:
+        pass
+    return "break"
+
+
+def _clip_paste(event):
+    """Ctrl+V: вставляет текст из буфера обмена в позицию курсора."""
+    w = event.widget
+    try:
+        text = w.clipboard_get()
+    except Exception:
+        return "break"
+    try:
+        if w.selection_present():
+            w.delete("sel.first", "sel.last")
+        w.insert("insert", text)
+    except Exception:
+        pass
+    return "break"
+
+
+def _clip_select_all(event):
+    """Ctrl+A: выделяет всё содержимое поля."""
+    w = event.widget
+    try:
+        w.selection_range(0, "end")
+        w.icursor("end")
+    except Exception:
+        pass
+    return "break"
+
+
+def _clip_dispatch(event):
+    """Единый перехват Ctrl+C/V/X/A по ФИЗИЧЕСКОМУ keycode.
+
+    На Windows keysym для Ctrl+буква при не-латинской раскладке часто
+    приходит как '??', поэтому ориентируемся на keycode (он одинаков
+    для любой раскладки) и на модификатор Control (state & 4).
+    """
+    w = getattr(event, "widget", None)
+    if w is None or not hasattr(w, "insert"):
+        return None
+    if not (event.state & 4):  # Control не нажат
+        return None
+    code = event.keycode
+    # 67=C, 86=V, 88=X, 65=A — физические клавиши
+    if code == 67:
+        return _clip_copy(event)
+    if code == 86:
+        return _clip_paste(event)
+    if code == 88:
+        return _clip_cut(event)
+    if code == 65:
+        return _clip_select_all(event)
+    # запасной путь: если keycode не пришёл, пробуем keysym
+    ks = (event.keysym or "").lower()
+    if ks == "c":
+        return _clip_copy(event)
+    if ks == "v":
+        return _clip_paste(event)
+    if ks == "x":
+        return _clip_cut(event)
+    if ks == "a":
+        return _clip_select_all(event)
+    return None
+
+
+def _bind_clipboard_on(widget):
+    """Навешивает Ctrl+C/V/X/A прямо на конкретный виджет ввода."""
+    pairs = [
+        ("<Control-c>", _clip_copy), ("<Control-C>", _clip_copy),
+        ("<Control-v>", _clip_paste), ("<Control-V>", _clip_paste),
+        ("<Control-x>", _clip_cut), ("<Control-X>", _clip_cut),
+        ("<Control-a>", _clip_select_all), ("<Control-A>", _clip_select_all),
+        ("<Control-Insert>", _clip_copy), ("<Shift-Insert>", _clip_paste),
+    ]
+    for seq, fn in pairs:
+        try:
+            widget.bind(seq, fn)
+        except Exception:
+            pass
+
+
+def install_clipboard_bindings(widget):
+    """Явно включает Ctrl+C/V/X/A во ВСЕХ полях ввода приложения.
+
+    Навешиваем через bind_class на уровне этого Tk-приложения (единственный
+    корневой виджет) — так привязка работает и для ttk.Entry, и для
+    ttk.Combobox, и для tk.Entry, созданных в любой момент.
+    """
+    pairs = [
+        ("<Control-c>", _clip_copy), ("<Control-C>", _clip_copy),
+        ("<Control-v>", _clip_paste), ("<Control-V>", _clip_paste),
+        ("<Control-x>", _clip_cut), ("<Control-X>", _clip_cut),
+        ("<Control-a>", _clip_select_all), ("<Control-A>", _clip_select_all),
+        ("<Control-Insert>", _clip_copy), ("<Shift-Insert>", _clip_paste),
+        ("<Control-KP_Insert>", _clip_copy), ("<Shift-KP_Insert>", _clip_paste),
+    ]
+    for cls in ("Entry", "TEntry", "TCombobox", "Text"):
+        for seq, fn in pairs:
+            try:
+                widget.bind_class(cls, seq, fn, add="+")
+            except Exception:
+                pass
+    widget.bind_all("<Control-KeyPress>", _clip_dispatch, add="+")
+
+
 def _upper_word(cls, text):
     """Обработчик FocusOut для Ф.И.О.: первая заглавная, остальное строчное."""
     return cap_word(text)
 
 
 def bind_enter_as_tab(widget):
-    """Enter в поле = Tab: переход к следующему виджету."""
+    """Enter в поле = Tab: переход к следующему виджету ввода.
+
+    tk_focusNext() для ttk-виджетов часто возвращает сам виджет, поэтому
+    строим порядок обхода явно: собираем все поля ввода текущей вкладки
+    и переходим к следующему по списку.
+    """
     def on_return(event):
         try:
-            event.widget.tk_focusNext().focus_set()
+            order = _focus_order(event.widget)
+            if not order:
+                return "break"
+            cur = event.widget
+            if cur in order:
+                nxt = order[(order.index(cur) + 1) % len(order)]
+            else:
+                nxt = order[0]
+            nxt.focus_set()
+            try:
+                nxt.selection_range(0, "end")
+            except Exception:
+                pass
         except Exception:
             pass
         return "break"
     widget.bind("<Return>", on_return)
+
+
+def _focus_order(widget):
+    """Список полей ввода в текущем контейнере, в порядке создания.
+
+    Для главного окна — поля активной вкладки ноутбука; для диалога
+    (Toplevel без ноутбука) — все поля этого диалога.
+    """
+    try:
+        top = widget.winfo_toplevel()
+        nb = getattr(top, "nb", None)
+        if nb is not None:
+            sel = nb.select()
+            tab = nb.nametowidget(sel) if sel else nb
+            order = _walk_entries(tab)
+            if order:
+                return order
+        return _walk_entries(top)
+    except Exception:
+        return []
+
+
+def _walk_entries(parent):
+    """Рекурсивно обходит виджеты и отдаёт поля ввода в порядке упаковки."""
+    result = []
+    try:
+        children = parent.winfo_children()
+    except Exception:
+        return result
+    for ch in children:
+        cls = ch.winfo_class()
+        if cls in ("Entry", "TEntry", "TCombobox", "Text"):
+            try:
+                if ch.cget("state") not in ("disabled",):
+                    result.append(ch)
+            except Exception:
+                result.append(ch)
+        else:
+            result.extend(_walk_entries(ch))
+    return result
 
 
 def _safe_focus(widget):
@@ -447,6 +644,12 @@ class PermitApp(tk.Tk):
             self.settings = load_settings()
         except Exception:
             self.settings = {}
+
+        # Явные привязки Ctrl+C/V/X/A во всех полях ввода
+        try:
+            install_clipboard_bindings(self)
+        except Exception:
+            pass
 
         # Ensure window is shown
         self._set_icon()
@@ -903,7 +1106,7 @@ class PermitApp(tk.Tk):
             bind_enter_as_tab(e_org)
             e_org.bind("<FocusOut>", self._autofill_applicant)
             # Организация: первая буква заглавная
-            e_org.bind("<FocusOut>", lambda ev: self.var_org_info.set(cap_word(self.var_org_info.get())), add="+")
+            e_org.bind("<FocusOut>", lambda ev: self.var_org_info.set(cap_first(self.var_org_info.get())), add="+")
             first_focus_widget = e_org
             ttk.Button(parent, text="🔍 Найти в базе", command=self._on_find_in_db).grid(
                 row=r, column=0, columnspan=2, sticky="w", padx=6, pady=4); r += 1
@@ -1139,7 +1342,9 @@ class PermitApp(tk.Tk):
         # Для всех процедур: ПГРЭЗ + произвольный объект + справочник
         ttk.Checkbutton(parent, text='ГПНИУ "ПГРЭЗ"', variable=self.var_include_pgrez).grid(row=r, column=0, columnspan=2, sticky="w", **pad); r += 1
         ttk.Label(parent, text="Произвольный объект:").grid(row=r, column=0, sticky="w", **pad)
-        ttk.Entry(parent, textvariable=self.var_custom_object, width=50).grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
+        e_custom_obj = ttk.Entry(parent, textvariable=self.var_custom_object, width=50)
+        e_custom_obj.grid(row=r, column=1, columnspan=3, sticky="ew", **pad)
+        bind_enter_as_tab(e_custom_obj)
 
         r += 1
         ttk.Label(parent, text="Справочник объектов (выберите по району):", font=("", 9)).grid(row=r, column=0, columnspan=4, sticky="w", **pad); r += 1
@@ -1478,7 +1683,7 @@ class VehicleDialog(tk.Toplevel):
         e_number.grid(row=1, column=1, sticky="ew", **pad)
 
         # Марка-модель: первая буква заглавная; Гос. номер: полностью заглавными
-        e_make.bind("<FocusOut>", lambda ev: self.var_make.set(cap_word(self.var_make.get())), add="+")
+        e_make.bind("<FocusOut>", lambda ev: self.var_make.set(cap_first(self.var_make.get())), add="+")
         e_number.bind("<FocusOut>", lambda ev: self.var_number.set(cap_id(self.var_number.get())), add="+")
         for _e in (e_make, e_number):
             bind_enter_as_tab(_e)
